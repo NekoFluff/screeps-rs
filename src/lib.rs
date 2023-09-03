@@ -61,7 +61,7 @@ pub fn game_loop() {
 
     debug!("running spawns");
     let mut additional = 0;
-    let creep_limit = 7;
+    let creep_limit = 5;
     let creeps = game::creeps();
     for spawn in game::spawns().values() {
         if creeps.values().count() >= creep_limit {
@@ -364,6 +364,10 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                             }
                         } else if let StructureObject::StructureRoad(road) = structure {
                             if road.hits() > 100 {
+                                continue;
+                            }
+                        } else if let StructureObject::StructureRampart(road) = structure {
+                            if road.hits() > 100000 {
                                 continue;
                             }
                         }
