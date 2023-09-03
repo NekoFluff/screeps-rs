@@ -281,7 +281,17 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
             // no target, let's find one depending on if we have energy
             let room = creep.room().expect("couldn't resolve creep room");
             if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 {
-                // first spawn
+                // controller: if the downgrade time is less than 10000 ticks, upgrade
+                for structure in structures.iter() {
+                    if let StructureObject::StructureController(controller) = structure {
+                        if controller.ticks_to_downgrade() < 10000 && controller.is_active() {
+                            entry.insert(CreepTarget::Upgrade(controller.id()));
+                            return;
+                        }
+                    }
+                }
+
+                // spawn
                 if let Some(spawn) = room.find(find::MY_SPAWNS, None).get(0) {
                     if spawn.is_active()
                         && spawn.store().get_free_capacity(Some(ResourceType::Energy)) > 0
@@ -333,7 +343,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
 
                 // controller: if the number of creeps upgrading is less than 2, upgrade
                 if creeps_upgrading < 2 {
-                    for structure in room.find(find::STRUCTURES, None).iter() {
+                    for structure in structures.iter() {
                         if let StructureObject::StructureController(controller) = structure {
                             entry.insert(CreepTarget::Upgrade(controller.id()));
                             return;
