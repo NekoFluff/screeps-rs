@@ -2,9 +2,8 @@ use std::fmt::Debug;
 
 use log::*;
 use screeps::{
-    find, Creep, HasPosition, HasStore, HasTypedId, MaybeHasTypedId, ObjectId, Resolvable,
-    ResourceType, SharedCreepProperties, StructureExtension, StructureObject, StructureProperties,
-    Transferable,
+    find, Creep, HasPosition, HasStore, MaybeHasTypedId, ObjectId, Resolvable, ResourceType,
+    SharedCreepProperties, StructureExtension, StructureObject, StructureProperties, Transferable,
 };
 
 pub struct TransferTask<T: Transferable + Resolvable + HasStore> {

@@ -79,13 +79,17 @@ impl TaskManager {
     }
 }
 
+type CompleteCallback = Box<dyn FnOnce(ObjectId<Creep>)>;
+type CancelCallback = Box<dyn FnOnce(ObjectId<Creep>)>;
+type SwitchCallback = Box<dyn FnOnce(ObjectId<Creep>, Box<dyn Task>)>;
+
 pub trait Task: Debug {
     fn execute(
         &self,
         creep: &Creep,
-        complete: Box<dyn FnOnce(ObjectId<Creep>)>,
-        cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
+        complete: CompleteCallback,
+        cancel: CancelCallback,
+        switch: SwitchCallback,
     );
 
     fn get_target_pos(&self) -> Option<screeps::Position> {
