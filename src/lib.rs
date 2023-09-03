@@ -18,6 +18,7 @@ use screeps::{
 use wasm_bindgen::prelude::*;
 
 mod logging;
+mod tasks;
 
 // add wasm_bindgen to any function you would like to expose for call from js
 #[wasm_bindgen]
