@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
+use std::fmt::Debug;
 
 use log::*;
 use screeps::{
@@ -11,7 +12,7 @@ use screeps::{
     prelude::*,
 };
 use screeps::{
-    ConstructionSite, RoomObjectProperties, Structure, StructureExtension, StructureSpawn,
+    ConstructionSite, Room, RoomObjectProperties, Structure, StructureExtension, StructureSpawn,
     StructureTower, StructureType,
 };
 use wasm_bindgen::prelude::*;
@@ -45,33 +46,156 @@ enum CreepTarget {
     Repair(ObjectId<Structure>),
 }
 
+impl Debug for CreepTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CreepTarget::Upgrade(id) => write!(f, "Upgrade({:?})", id),
+            CreepTarget::Harvest(id) => {
+                if let Some(source) = id.resolve() {
+                    write!(
+                        f,
+                        "Harvest at ({}, {}) [{}/{}]",
+                        source.pos().x().u8(),
+                        source.pos().y().u8(),
+                        source.energy(),
+                        source.energy_capacity()
+                    )
+                } else {
+                    write!(f, "Harvest ({:?})", id)
+                }
+            }
+            CreepTarget::Build(id) => {
+                if let Some(construction_site) = id.resolve() {
+                    write!(
+                        f,
+                        "Build {:?} at ({}, {}) [{}/{}]",
+                        construction_site.structure_type(),
+                        construction_site.pos().x().u8(),
+                        construction_site.pos().y().u8(),
+                        construction_site.progress(),
+                        construction_site.progress_total()
+                    )
+                } else {
+                    write!(f, "Build ({:?})", id)
+                }
+            }
+            CreepTarget::TransferToSpawn(id) => write!(f, "TransferToSpawn({:?})", id),
+            CreepTarget::TransferToExtension(id) => write!(f, "TransferToExtension({:?})", id),
+            CreepTarget::TransferToTower(id) => write!(f, "TransferToTower({:?})", id),
+            CreepTarget::Heal(id) => write!(f, "Heal({:?})", id),
+            CreepTarget::Repair(id) => {
+                if let Some(structure) = id.resolve() {
+                    write!(
+                        f,
+                        "Repair {:?} at ({}, {}) [{}/{}]",
+                        structure.structure_type(),
+                        structure.pos().x().u8(),
+                        structure.pos().y().u8(),
+                        structure.hits(),
+                        structure.hits_max()
+                    )
+                } else {
+                    write!(f, "Repair ({:?})", id)
+                }
+            }
+        }
+    }
+}
+
 // to use a reserved name as a function name, use `js_name`:
 #[wasm_bindgen(js_name = loop)]
 pub fn game_loop() {
-    debug!("loop starting! CPU: {}", game::cpu::get_used());
+    let target_creep_count = 7;
+
+    debug!(
+        "loop starting! CPU: {}. Peak Malloc: {}. Total Memory: {}",
+        game::cpu::get_used(),
+        game::cpu::get_heap_statistics().peak_malloced_memory(),
+        game::cpu::get_heap_statistics().total_heap_size()
+    );
     // mutably borrow the creep_targets refcell, which is holding our creep target locks
     // in the wasm heap
     CREEP_TARGETS.with(|creep_targets_refcell| {
         let mut creep_targets = creep_targets_refcell.borrow_mut();
         debug!("running creeps");
+
+        let creeps = game::creeps().values();
+        let idle_creeps = creeps
+            .filter(|c| match creep_targets.entry(c.name()) {
+                Entry::Occupied(_) => false,
+                Entry::Vacant(_) => true,
+            })
+            .collect::<Vec<Creep>>();
+        let idle_creep_count = idle_creeps.len();
+
+        let mut jobs = Vec::new();
+        if let Some(creep) = idle_creeps.get(0) {
+            jobs =
+                get_creep_target_jobs(&creep.room().unwrap(), idle_creep_count, target_creep_count);
+        }
+
+        for creep in idle_creeps {
+            // Idle creeps should always harvest energy first
+            if creep.store().get_used_capacity(Some(ResourceType::Energy)) == 0 {
+                if let Some(source) = creep
+                    .room()
+                    .unwrap()
+                    .find(find::SOURCES_ACTIVE, None)
+                    .get(0)
+                {
+                    let job = CreepTarget::Harvest(source.id());
+                    let _ = js_sys::Reflect::set(
+                        &creep.memory(),
+                        &JsValue::from_str("job"),
+                        &JsValue::from_str(&format!("{:?}", job)),
+                    );
+                    creep_targets.insert(creep.name(), job);
+                    return;
+                }
+            }
+
+            // Once they have enough energy, they can pick up a job
+            let job = jobs.pop();
+            if let Some(job) = job {
+                info!("assigning {} to {:?}", creep.name(), job);
+                let _ = js_sys::Reflect::set(
+                    &creep.memory(),
+                    &JsValue::from_str("job"),
+                    &JsValue::from_str(&format!("{:?}", job)),
+                );
+                creep_targets.insert(creep.name(), job);
+            }
+        }
+
         for creep in game::creeps().values() {
             run_creep(&creep, &mut creep_targets);
         }
     });
 
+    spawn_creeps(target_creep_count);
+
+    info!(
+        "Done! cpu: {} Peak Malloc: {}. Total Memory: {}",
+        game::cpu::get_used(),
+        game::cpu::get_heap_statistics().peak_malloced_memory(),
+        game::cpu::get_heap_statistics().total_heap_size()
+    );
+}
+
+fn spawn_creeps(target_creep_count: usize) {
     debug!("running spawns");
     let mut additional = 0;
-    let creep_limit = 5;
+
     let creeps = game::creeps();
     for spawn in game::spawns().values() {
-        if creeps.values().count() >= creep_limit {
+        if creeps.values().count() >= target_creep_count {
             break;
         }
         info!(
             "running spawn {} [{}/{}]",
             String::from(spawn.name()),
             creeps.values().count(),
-            creep_limit
+            target_creep_count
         );
 
         let mut body = vec![Part::Move, Part::Move, Part::Carry, Part::Work];
@@ -84,12 +208,16 @@ pub fn game_loop() {
 
         info!("base body cost: {}", base_cost);
 
-        let remaining_energy = spawn.room().unwrap().energy_capacity_available() - base_cost;
-        let x = Part::Move.cost() + Part::Work.cost() + 1;
-        let y = remaining_energy / x;
-        for _ in 0..y {
-            body.push(Part::Move);
-            body.push(Part::Work);
+        if (spawn.room().unwrap().energy_available() > base_cost) {
+            let remaining_energy =
+                std::cmp::max(spawn.room().unwrap().energy_available() - base_cost, 0);
+            let x = Part::Move.cost() + Part::Work.cost() + 1;
+            let y = remaining_energy / x;
+            info!("adding {} move/work pairs", y);
+            for _ in 0..y {
+                body.push(Part::Move);
+                body.push(Part::Work);
+            }
         }
 
         info!(
@@ -110,23 +238,150 @@ pub fn game_loop() {
             }
         }
     }
+}
 
-    info!("Done! cpu: {}", game::cpu::get_used())
+fn get_creep_target_jobs(
+    room: &Room,
+    max_jobs: usize,
+    target_creep_count: usize,
+) -> Vec<CreepTarget> {
+    let mut creep_targets: Vec<CreepTarget> = Vec::new();
+
+    let structures = room.find(find::STRUCTURES, None);
+    let construction_sites = room.find(find::CONSTRUCTION_SITES, None);
+    let controller = room.controller();
+
+    // controller: if the downgrade time is less than 10000 ticks, upgrade
+    if let Some(c) = controller {
+        if let Some(owner) = c.owner() {
+            if owner.username() == "CrazyFluff" && c.ticks_to_downgrade() < 10000 && c.is_active() {
+                creep_targets.push(CreepTarget::Upgrade(c.id()));
+                if creep_targets.len() >= max_jobs {
+                    return creep_targets;
+                }
+            }
+        }
+    }
+
+    // spawn
+    if let Some(spawn) = room.find(find::MY_SPAWNS, None).get(0) {
+        if spawn.is_active() && spawn.store().get_free_capacity(Some(ResourceType::Energy)) > 0 {
+            if let Some(id) = spawn.try_id() {
+                creep_targets.push(CreepTarget::TransferToSpawn(id));
+
+                if game::creeps().values().count() < target_creep_count {
+                    for _ in 0..max_jobs {
+                        creep_targets.push(CreepTarget::TransferToSpawn(id));
+                    }
+                }
+
+                if creep_targets.len() >= max_jobs {
+                    return creep_targets;
+                }
+            }
+        }
+    }
+
+    // towers
+    let towers = structures
+        .iter()
+        .filter(|s| s.structure_type() == StructureType::Tower);
+    for tower in towers {
+        if let StructureObject::StructureTower(tower) = tower {
+            if tower.is_active() && tower.store().get_free_capacity(Some(ResourceType::Energy)) > 0
+            {
+                if let Some(id) = tower.try_id() {
+                    creep_targets.push(CreepTarget::TransferToTower(id));
+                    if creep_targets.len() >= max_jobs {
+                        return creep_targets;
+                    }
+                }
+            }
+        }
+    }
+
+    // extensions
+    let extensions = structures
+        .iter()
+        .filter(|s| s.structure_type() == StructureType::Extension);
+    for extension in extensions {
+        if let StructureObject::StructureExtension(extension) = extension {
+            if extension.is_active()
+                && extension
+                    .store()
+                    .get_free_capacity(Some(ResourceType::Energy))
+                    > 0
+            {
+                if let Some(id) = extension.try_id() {
+                    creep_targets.push(CreepTarget::TransferToExtension(id));
+
+                    if game::creeps().values().count() < target_creep_count {
+                        for _ in 0..max_jobs {
+                            creep_targets.push(CreepTarget::TransferToExtension(id));
+                        }
+                    }
+
+                    if creep_targets.len() >= max_jobs {
+                        return creep_targets;
+                    }
+                }
+            }
+        }
+    }
+
+    // healing
+    // if creep.hits() < creep.hits_max() {
+    //     info!("{} needs healing", creep.name());
+    //     entry.insert(CreepTarget::Heal(creep.try_id().unwrap()));
+    //     return;
+    // }
+
+    // repair
+    for structure in structures.iter() {
+        let s = structure.as_structure();
+        if s.hits() < s.hits_max() / 2 {
+            if let StructureObject::StructureWall(wall) = structure {
+                if wall.hits() > 25000 {
+                    continue;
+                }
+            } else if let StructureObject::StructureRoad(road) = structure {
+                if road.hits() > 100 {
+                    continue;
+                }
+            } else if let StructureObject::StructureRampart(road) = structure {
+                if road.hits() > 100000 {
+                    continue;
+                }
+            }
+            let id = s.try_id().unwrap();
+            creep_targets.push(CreepTarget::Repair(id));
+            if creep_targets.len() >= max_jobs {
+                return creep_targets;
+            }
+        }
+    }
+
+    // construction sites
+    for construction_site in construction_sites.iter() {
+        if let Some(id) = construction_site.try_id() {
+            creep_targets.push(CreepTarget::Build(id));
+            if creep_targets.len() >= max_jobs {
+                return creep_targets;
+            }
+        }
+    }
+
+    info!("creep targets: {:?}", creep_targets.len());
+
+    creep_targets
 }
 
 fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
     if creep.spawning() {
         return;
     }
-    let structures: Vec<StructureObject> = creep.room().unwrap().find(find::STRUCTURES, None);
+
     let name = creep.name();
-    debug!("running creep: {}", name);
-
-    let creeps_upgrading = creep_targets
-        .iter()
-        .filter(|c| matches!(c.1, CreepTarget::Upgrade(_)))
-        .count();
-
     let target = creep_targets.entry(name);
     match target {
         Entry::Occupied(entry) => {
@@ -270,7 +525,11 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                             //     structure.id(),
                             //     structure.structure_type()
                             // );
-                            entry.remove();
+                            if (structure.hits() >= structure.hits_max()
+                                || creep.store().get_used_capacity(Some(ResourceType::Energy)) == 0)
+                            {
+                                entry.remove();
+                            }
                         } else {
                             let _ = creep.move_to(&structure);
                         }
@@ -287,127 +546,11 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
             // no target, let's find one depending on if we have energy
             let room = creep.room().expect("couldn't resolve creep room");
             if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 {
-                // controller: if the downgrade time is less than 10000 ticks, upgrade
-                for structure in structures.iter() {
-                    if let StructureObject::StructureController(controller) = structure {
-                        if controller.ticks_to_downgrade() < 10000 && controller.is_active() {
-                            entry.insert(CreepTarget::Upgrade(controller.id()));
-                            return;
-                        }
-                    }
+                if let Some(controller) = room.controller() {
+                    entry.insert(CreepTarget::Upgrade(controller.id()));
                 }
-
-                // spawn
-                if let Some(spawn) = room.find(find::MY_SPAWNS, None).get(0) {
-                    if spawn.is_active()
-                        && spawn.store().get_free_capacity(Some(ResourceType::Energy)) > 0
-                    {
-                        if let Some(id) = spawn.try_id() {
-                            entry.insert(CreepTarget::TransferToSpawn(id));
-                            return;
-                        }
-                    }
-                }
-
-                // towers
-                let towers = structures
-                    .iter()
-                    .filter(|s| s.structure_type() == StructureType::Tower);
-                for tower in towers {
-                    if let StructureObject::StructureTower(tower) = tower {
-                        if tower.is_active()
-                            && tower.store().get_free_capacity(Some(ResourceType::Energy)) > 0
-                        {
-                            if let Some(id) = tower.try_id() {
-                                entry.insert(CreepTarget::TransferToTower(id));
-                                return;
-                            }
-                        }
-                    }
-                }
-
-                // extensions
-                let extensions = structures
-                    .iter()
-                    .filter(|s| s.structure_type() == StructureType::Extension);
-
-                for extension in extensions {
-                    if let StructureObject::StructureExtension(extension) = extension {
-                        if extension.is_active()
-                            && extension
-                                .store()
-                                .get_free_capacity(Some(ResourceType::Energy))
-                                > 0
-                        {
-                            if let Some(id) = extension.try_id() {
-                                entry.insert(CreepTarget::TransferToExtension(id));
-                                return;
-                            }
-                        }
-                    }
-                }
-
-                // healing
-                if creep.hits() < creep.hits_max() {
-                    info!("{} needs healing", creep.name());
-                    entry.insert(CreepTarget::Heal(creep.try_id().unwrap()));
-                    return;
-                }
-
-                // repair
-                for structure in structures.iter() {
-                    let s = structure.as_structure();
-                    if s.hits() < s.hits_max() {
-                        if let StructureObject::StructureWall(wall) = structure {
-                            if wall.hits() > 25000 {
-                                continue;
-                            }
-                        } else if let StructureObject::StructureRoad(road) = structure {
-                            if road.hits() > 100 {
-                                continue;
-                            }
-                        } else if let StructureObject::StructureRampart(road) = structure {
-                            if road.hits() > 100000 {
-                                continue;
-                            }
-                        }
-                        let id = s.try_id().unwrap();
-                        entry.insert(CreepTarget::Repair(id));
-                        return;
-                    }
-                }
-
-                // controller: if the number of creeps upgrading is less than 2, upgrade
-                if creeps_upgrading < 2 {
-                    for structure in structures.iter() {
-                        if let StructureObject::StructureController(controller) = structure {
-                            entry.insert(CreepTarget::Upgrade(controller.id()));
-                            return;
-                        }
-                    }
-                }
-
-                // general construction sites
-                if let Some(construction_site) = creep
-                    .pos()
-                    .find_closest_by_path(find::CONSTRUCTION_SITES, None)
-                {
-                    if let Some(id) = construction_site.try_id() {
-                        entry.insert(CreepTarget::Build(id));
-                        return;
-                    }
-                }
-
-                // controller
-                for structure in room.find(find::STRUCTURES, None).iter() {
-                    if let StructureObject::StructureController(controller) = structure {
-                        entry.insert(CreepTarget::Upgrade(controller.id()));
-                        return;
-                    }
-                }
-            } else if let Some(source) = room.find(find::SOURCES_ACTIVE, None).get(0) {
-                entry.insert(CreepTarget::Harvest(source.id()));
-                return;
+            } else {
+                error!("creep {} has no target and no energy", creep.name());
             }
         }
     }
