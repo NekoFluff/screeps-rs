@@ -352,7 +352,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                     let s = structure.as_structure();
                     if s.hits() < s.hits_max() {
                         if let StructureObject::StructureWall(wall) = structure {
-                            if wall.hits() > 100000 {
+                            if wall.hits() > 25000 {
                                 continue;
                             }
                         }
