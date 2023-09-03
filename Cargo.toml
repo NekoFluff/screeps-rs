@@ -1,5 +1,5 @@
 [package]
-name = "screeps-starter-rust"
+name = "screeps-rs"
 version = "0.0.0"
 authors = []
 edition = "2021"
@@ -32,7 +32,7 @@ wasm-opt = false
 # -O4 - optimize aggressively for performance
 # -Oz - optimize aggressively for code size
 # -g - leave debug info in place, allowing for more descriptive stack traces on panic
-# --disable-sign-ext - prevents opcodes that the screeps servers can't load (see 
+# --disable-sign-ext - prevents opcodes that the screeps servers can't load (see
 # https://github.com/rustyscreeps/screeps-game-api/issues/391)
 #wasm-opt = ["-O4", "--disable-sign-ext"]
 

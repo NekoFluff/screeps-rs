@@ -1,4 +1,4 @@
-# screeps-starter-rust
+# screeps-rs
 
 Starter Rust AI for [Screeps: World][screeps], the JavaScript-based MMO game.
 
@@ -21,8 +21,8 @@ Quickstart:
 cargo install cargo-screeps
 
 # Clone the starter
-git clone https://github.com/rustyscreeps/screeps-starter-rust.git
-cd screeps-starter-rust
+git clone https://github.com/rustyscreeps/screeps-rs.git
+cd screeps-rs
 
 # Copy the example config, and set up at least one deployment mode
 cp example-screeps.toml screeps.toml
