@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 
-use js_sys::Object;
 use log::*;
 use screeps::{
     constants::{ErrorCode, Part, ResourceType},
@@ -12,8 +11,8 @@ use screeps::{
     prelude::*,
 };
 use screeps::{
-    structure, ConstructionSite, FindPathOptions, RoomObjectProperties, Structure,
-    StructureExtension, StructureRoad, StructureSpawn, StructureType,
+    ConstructionSite, RoomObjectProperties, Structure, StructureExtension, StructureSpawn,
+    StructureTower, StructureType,
 };
 use wasm_bindgen::prelude::*;
 
@@ -41,6 +40,7 @@ enum CreepTarget {
     Build(ObjectId<ConstructionSite>),
     TransferToSpawn(ObjectId<StructureSpawn>),
     TransferToExtension(ObjectId<StructureExtension>),
+    TransferToTower(ObjectId<StructureTower>),
     Heal(ObjectId<Creep>),
     Repair(ObjectId<Structure>),
 }
@@ -64,7 +64,7 @@ pub fn game_loop() {
     let creep_limit = 7;
     let creeps = game::creeps();
     for spawn in game::spawns().values() {
-        if (creeps.values().count() >= creep_limit) {
+        if creeps.values().count() >= creep_limit {
             break;
         }
         info!(
@@ -118,6 +118,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
     if creep.spawning() {
         return;
     }
+    let structures: Vec<StructureObject> = creep.room().unwrap().find(find::STRUCTURES, None);
     let name = creep.name();
     debug!("running creep: {}", name);
 
@@ -219,6 +220,24 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                         entry.remove();
                     }
                 }
+                CreepTarget::TransferToTower(source_id)
+                    if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 =>
+                {
+                    if let Some(source) = source_id.resolve() {
+                        if creep.pos().is_near_to(source.pos()) {
+                            creep
+                                .transfer(&source, ResourceType::Energy, None)
+                                .unwrap_or_else(|e| {
+                                    warn!("couldn't transfer: {:?}", e);
+                                    entry.remove();
+                                });
+                        } else {
+                            let _ = creep.move_to(&source);
+                        }
+                    } else {
+                        entry.remove();
+                    }
+                }
                 CreepTarget::Heal(creep_id) => {
                     if let Some(creep) = creep_id.resolve() {
                         if creep.hits() < creep.hits_max() {
@@ -274,8 +293,24 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                     }
                 }
 
+                // towers
+                let towers = structures
+                    .iter()
+                    .filter(|s| s.structure_type() == StructureType::Tower);
+                for tower in towers {
+                    if let StructureObject::StructureTower(tower) = tower {
+                        if tower.is_active()
+                            && tower.store().get_free_capacity(Some(ResourceType::Energy)) > 0
+                        {
+                            if let Some(id) = tower.try_id() {
+                                entry.insert(CreepTarget::TransferToTower(id));
+                                return;
+                            }
+                        }
+                    }
+                }
+
                 // extensions
-                let structures = room.find(find::STRUCTURES, None);
                 let extensions = structures
                     .iter()
                     .filter(|s| s.structure_type() == StructureType::Extension);
@@ -297,7 +332,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                 }
 
                 // controller: if the number of creeps upgrading is less than 2, upgrade
-                if (creeps_upgrading < 2) {
+                if creeps_upgrading < 2 {
                     for structure in room.find(find::STRUCTURES, None).iter() {
                         if let StructureObject::StructureController(controller) = structure {
                             entry.insert(CreepTarget::Upgrade(controller.id()));
