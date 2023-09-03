@@ -263,8 +263,14 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                         if creep.pos().is_near_to(structure.pos()) {
                             creep.repair(&structure).unwrap_or_else(|e| {
                                 warn!("couldn't repair: {:?}", e);
-                                entry.remove();
                             });
+                            // info!(
+                            //     "{} repairing {} ({:?})",
+                            //     creep.name(),
+                            //     structure.id(),
+                            //     structure.structure_type()
+                            // );
+                            entry.remove();
                         } else {
                             let _ = creep.move_to(&structure);
                         }
@@ -343,6 +349,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
 
                 // healing
                 if creep.hits() < creep.hits_max() {
+                    info!("{} needs healing", creep.name());
                     entry.insert(CreepTarget::Heal(creep.try_id().unwrap()));
                     return;
                 }
@@ -353,6 +360,10 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                     if s.hits() < s.hits_max() {
                         if let StructureObject::StructureWall(wall) = structure {
                             if wall.hits() > 25000 {
+                                continue;
+                            }
+                        } else if let StructureObject::StructureRoad(road) = structure {
+                            if road.hits() > 100 {
                                 continue;
                             }
                         }
