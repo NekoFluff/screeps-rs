@@ -12,8 +12,8 @@ use screeps::{
     prelude::*,
 };
 use screeps::{
-    ConstructionSite, FindPathOptions, RoomObjectProperties, Structure, StructureExtension,
-    StructureRoad, StructureSpawn, StructureType,
+    structure, ConstructionSite, FindPathOptions, RoomObjectProperties, Structure,
+    StructureExtension, StructureRoad, StructureSpawn, StructureType,
 };
 use wasm_bindgen::prelude::*;
 
@@ -324,10 +324,15 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                 }
 
                 // repair
-                if let Some(structure) = creep.pos().find_closest_by_path(find::STRUCTURES, None) {
-                    let id = structure.as_structure().try_id().unwrap();
+                for structure in structures.iter() {
                     let s = structure.as_structure();
                     if s.hits() < s.hits_max() {
+                        if let StructureObject::StructureWall(wall) = structure {
+                            if wall.hits() > 100000 {
+                                continue;
+                            }
+                        }
+                        let id = s.try_id().unwrap();
                         entry.insert(CreepTarget::Repair(id));
                         return;
                     }
