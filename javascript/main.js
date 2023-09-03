@@ -10,6 +10,13 @@ function console_error(...args) {
 }
 
 module.exports.loop = function () {
+    // Clean up dead creeps
+    for (var i in Memory.creeps) {
+        if (!Game.creeps[i]) {
+            delete Memory.creeps[i];
+        }
+    }
+
     try {
         if (wasm_module) {
             wasm_module.loop();
