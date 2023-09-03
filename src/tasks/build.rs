@@ -17,6 +17,10 @@ impl BuildTask {
 }
 
 impl super::Task for BuildTask {
+    fn get_type(&self) -> super::TaskType {
+        super::TaskType::Build
+    }
+
     fn execute(
         &self,
         creep: &Creep,

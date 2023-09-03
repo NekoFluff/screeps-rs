@@ -16,6 +16,10 @@ impl RepairTask {
 }
 
 impl super::Task for RepairTask {
+    fn get_type(&self) -> super::TaskType {
+        super::TaskType::Repair
+    }
+
     fn execute(
         &self,
         creep: &Creep,
@@ -44,6 +48,10 @@ impl super::Task for RepairTask {
         } else {
             complete(creep.try_id().unwrap());
         }
+    }
+
+    fn get_target_pos(&self) -> Option<screeps::Position> {
+        self.target.resolve().map(|target| target.pos())
     }
 }
 

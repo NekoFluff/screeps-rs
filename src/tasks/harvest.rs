@@ -16,6 +16,10 @@ impl HarvestTask {
 }
 
 impl super::Task for HarvestTask {
+    fn get_type(&self) -> super::TaskType {
+        super::TaskType::Harvest
+    }
+
     fn execute(
         &self,
         creep: &Creep,

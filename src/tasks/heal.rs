@@ -14,6 +14,10 @@ impl HealTask {
 }
 
 impl super::Task for HealTask {
+    fn get_type(&self) -> super::TaskType {
+        super::TaskType::Heal
+    }
+
     fn execute(
         &self,
         creep: &Creep,

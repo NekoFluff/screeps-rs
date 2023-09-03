@@ -83,4 +83,20 @@ pub trait Task: Debug {
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
         switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
     );
+
+    fn get_target_pos(&self) -> Option<screeps::Position> {
+        None
+    }
+
+    fn get_type(&self) -> TaskType;
+}
+
+#[derive(Debug, PartialEq)]
+pub enum TaskType {
+    Build,
+    Harvest,
+    Heal,
+    Repair,
+    Transfer,
+    Upgrade,
 }

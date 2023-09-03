@@ -1,5 +1,5 @@
-use std::cell::RefCell;
 use std::collections::hash_map::Entry;
+use std::{cell::RefCell, collections::HashMap};
 
 use log::*;
 use screeps::{
@@ -10,10 +10,8 @@ use screeps::{
     prelude::*,
 };
 use screeps::{Room, RoomObjectProperties, StructureType};
-use tasks::{HarvestTask, Task, TaskManager, TransferTask};
+use tasks::{BuildTask, HarvestTask, RepairTask, Task, TaskManager, TransferTask, UpgradeTask};
 use wasm_bindgen::prelude::*;
-
-use crate::tasks::{BuildTask, RepairTask, UpgradeTask};
 
 mod logging;
 mod tasks;
@@ -86,26 +84,14 @@ pub fn game_loop() {
             }
 
             // Once they have enough energy, they can pick up a task
-            let task = tasks.pop();
-            if let Some(task) = task {
-                info!("assigning {} to {:?}", creep.name(), task);
-                let _ = js_sys::Reflect::set(
-                    &creep.memory(),
-                    &JsValue::from_str("task"),
-                    &JsValue::from_str(&format!("{:?}", task)),
-                );
-                task_manager.add_task(&creep, task);
-            } else {
-                let task = UpgradeTask::new(creep.room().unwrap().controller().unwrap().id());
-                info!("[DEFAULT] assigning {} to {:?}", creep.name(), task);
-
-                let _ = js_sys::Reflect::set(
-                    &creep.memory(),
-                    &JsValue::from_str("task"),
-                    &JsValue::from_str(&format!("{:?}", task)),
-                );
-                task_manager.add_task(&creep, Box::new(task));
-            }
+            let task = get_task_for_creep(&creep, &mut tasks);
+            info!("assigning {} to {:?}", creep.name(), task);
+            let _ = js_sys::Reflect::set(
+                &creep.memory(),
+                &JsValue::from_str("task"),
+                &JsValue::from_str(&format!("{:?}", task)),
+            );
+            task_manager.add_task(&creep, task);
         }
 
         task_manager.execute_tasks();
@@ -203,25 +189,6 @@ fn get_potential_creep_tasks(
         }
     }
 
-    // spawn
-    if let Some(spawn) = room.find(find::MY_SPAWNS, None).get(0) {
-        if spawn.is_active() && spawn.store().get_free_capacity(Some(ResourceType::Energy)) > 0 {
-            if let Some(id) = spawn.try_id() {
-                creep_targets.push(Box::new(TransferTask::new(id)));
-
-                if game::creeps().values().count() < target_creep_count {
-                    for _ in 0..max_tasks {
-                        creep_targets.push(Box::new(TransferTask::new(id)));
-                    }
-                }
-
-                if creep_targets.len() >= max_tasks {
-                    return creep_targets;
-                }
-            }
-        }
-    }
-
     // towers
     let towers = structures
         .iter()
@@ -251,19 +218,33 @@ fn get_potential_creep_tasks(
                     .store()
                     .get_free_capacity(Some(ResourceType::Energy))
                     > 0
+                && extension.owner().unwrap().username() == "CrazyFluff"
             {
                 if let Some(id) = extension.try_id() {
                     creep_targets.push(Box::new(TransferTask::new(id)));
+                }
+            }
+        }
+    }
 
-                    if game::creeps().values().count() < target_creep_count {
-                        for _ in 0..max_tasks {
-                            creep_targets.push(Box::new(TransferTask::new(id)));
-                        }
-                    }
+    if creep_targets.len() >= max_tasks {
+        return creep_targets;
+    }
 
-                    if creep_targets.len() >= max_tasks {
-                        return creep_targets;
+    // spawn
+    if let Some(spawn) = room.find(find::MY_SPAWNS, None).get(0) {
+        if spawn.is_active() && spawn.store().get_free_capacity(Some(ResourceType::Energy)) > 0 {
+            if let Some(id) = spawn.try_id() {
+                creep_targets.push(Box::new(TransferTask::new(id)));
+
+                if game::creeps().values().count() < target_creep_count {
+                    for _ in 0..max_tasks {
+                        creep_targets.push(Box::new(TransferTask::new(id)));
                     }
+                }
+
+                if creep_targets.len() >= max_tasks {
+                    return creep_targets;
                 }
             }
         }
@@ -311,7 +292,51 @@ fn get_potential_creep_tasks(
         }
     }
 
-    info!("creep targets: {:?}", creep_targets.len());
-
     creep_targets
+}
+
+pub fn get_task_for_creep(creep: &Creep, task_list: &mut Vec<Box<dyn Task>>) -> Box<dyn Task> {
+    let task = task_list.get(0);
+
+    if task.is_none() {
+        return Box::new(UpgradeTask::new(
+            creep.room().unwrap().controller().unwrap().id(),
+        ));
+    }
+
+    let task = task.unwrap();
+
+    // (index, task)
+    let mut similar_tasks: Vec<(usize, &Box<dyn Task>)> = vec![];
+    for (index, task2) in task_list.iter().enumerate() {
+        if task.get_type() == task2.get_type() {
+            similar_tasks.push((index, task2));
+        } else {
+            break;
+        }
+    }
+    // info!("similar tasks: {:?}", similar_tasks);
+
+    if similar_tasks.len() == 1 {
+        return task_list.remove(similar_tasks.get(0).unwrap().0);
+    }
+
+    // (index, distance to target)
+    let mut tasks_by_distance = similar_tasks
+        .iter()
+        .map(|t| {
+            if let Some(target) = t.1.get_target_pos() {
+                let distance = creep.pos().get_range_to(target);
+                return (t.0, distance);
+            }
+            (t.0, u32::MAX)
+        })
+        .collect::<Vec<(usize, u32)>>();
+
+    tasks_by_distance.sort_by(|a, b| a.1.cmp(&b.1));
+    // info!("sorted tasks: {:?}", tasks_by_distance);
+
+    let shortest_distance_idx = tasks_by_distance.first().unwrap().0;
+
+    task_list.remove(shortest_distance_idx)
 }

@@ -17,6 +17,10 @@ impl UpgradeTask {
 }
 
 impl super::Task for UpgradeTask {
+    fn get_type(&self) -> super::TaskType {
+        super::TaskType::Upgrade
+    }
+
     fn execute(
         &self,
         creep: &Creep,
