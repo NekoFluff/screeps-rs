@@ -33,16 +33,24 @@ impl TaskManager {
     }
 
     pub fn execute_tasks(&mut self) {
+        type TaskMap = HashMap<ObjectId<Creep>, Box<dyn Task>>;
+
         let completed_tasks = Rc::new(RefCell::new(Vec::new()));
         let cancelled_tasks = Rc::new(RefCell::new(Vec::new()));
+        let switch_tasks: Rc<RefCell<TaskMap>> = Rc::new(RefCell::new(HashMap::new()));
+
         for (creep_id, task) in self.tasks.iter() {
             if let Some(creep) = game::get_object_by_id_typed(creep_id) {
                 let completed_tasks_clone = completed_tasks.clone();
                 let cancelled_tasks_clone = cancelled_tasks.clone();
+                let switch_tasks_clone = switch_tasks.clone();
                 task.execute(
                     &creep,
                     Box::new(move |creep_id| completed_tasks_clone.borrow_mut().push(creep_id)),
                     Box::new(move |creep_id| cancelled_tasks_clone.borrow_mut().push(creep_id)),
+                    Box::new(move |creep_id, task| {
+                        switch_tasks_clone.borrow_mut().insert(creep_id, task);
+                    }),
                 );
             }
         }
@@ -60,6 +68,10 @@ impl TaskManager {
             );
             self.tasks.remove(cancelled_task);
         }
+        for (creep_id, task) in switch_tasks.borrow_mut().drain() {
+            info!("{} task switched to: {:?}", creep_id, task);
+            self.tasks.insert(creep_id, task);
+        }
     }
 }
 
@@ -69,5 +81,6 @@ pub trait Task: Debug {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
+        switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
     );
 }

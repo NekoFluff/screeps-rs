@@ -19,6 +19,7 @@ impl super::Task for HealTask {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
+        _switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
     ) {
         if creep.store().get_free_capacity(Some(ResourceType::Energy)) == 0 {
             complete(creep.try_id().unwrap());

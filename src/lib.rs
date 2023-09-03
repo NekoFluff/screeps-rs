@@ -113,12 +113,12 @@ pub fn game_loop() {
 
     spawn_creeps(target_creep_count);
 
-    info!(
-        "Done! cpu: {} Peak Malloc: {}. Total Memory: {}",
-        game::cpu::get_used(),
-        game::cpu::get_heap_statistics().peak_malloced_memory(),
-        game::cpu::get_heap_statistics().total_heap_size()
-    );
+    // info!(
+    //     "Done! cpu: {} Peak Malloc: {}. Total Memory: {}",
+    //     game::cpu::get_used(),
+    //     game::cpu::get_heap_statistics().peak_malloced_memory(),
+    //     game::cpu::get_heap_statistics().total_heap_size()
+    // );
 }
 
 fn spawn_creeps(target_creep_count: usize) {
@@ -150,12 +150,13 @@ fn spawn_creeps(target_creep_count: usize) {
         if spawn.room().unwrap().energy_available() > base_cost {
             let remaining_energy =
                 std::cmp::max(spawn.room().unwrap().energy_available() - base_cost, 0);
-            let x = Part::Move.cost() + Part::Work.cost() + 1;
+            let x = Part::Move.cost() + Part::Work.cost() + Part::Carry.cost() + 1;
             let y = remaining_energy / x;
             info!("adding {} move/work pairs", y);
             for _ in 0..y {
                 body.push(Part::Move);
                 body.push(Part::Work);
+                body.push(Part::Carry);
             }
         }
 

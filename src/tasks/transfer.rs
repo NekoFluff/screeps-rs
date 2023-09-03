@@ -2,8 +2,8 @@ use std::fmt::Debug;
 
 use log::*;
 use screeps::{
-    Creep, HasPosition, MaybeHasTypedId, ObjectId, Resolvable, ResourceType, SharedCreepProperties,
-    Transferable,
+    find, Creep, HasPosition, HasTypedId, MaybeHasTypedId, ObjectId, Resolvable, ResourceType,
+    SharedCreepProperties, StructureObject, StructureProperties, Transferable,
 };
 
 pub struct TransferTask<T: Transferable + Resolvable> {
@@ -22,6 +22,7 @@ impl<T: Transferable + Resolvable> super::Task for TransferTask<T> {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
+        switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
     ) {
         if creep.store().get_used_capacity(Some(ResourceType::Energy)) == 0 {
             complete(creep.try_id().unwrap());
@@ -34,6 +35,42 @@ impl<T: Transferable + Resolvable> super::Task for TransferTask<T> {
                     .transfer(&target, ResourceType::Energy, None)
                     .unwrap_or_else(|e| {
                         warn!("couldn't transfer: {:?}", e);
+
+                        // Get extensions that require energy and sort by distance
+                        let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
+                        let mut extensions = structures
+                            .iter()
+                            .filter(|s| {
+                                if s.structure_type() == screeps::StructureType::Extension {
+                                    if let StructureObject::StructureExtension(extension) = s {
+                                        if extension
+                                            .store()
+                                            .get_free_capacity(Some(ResourceType::Energy))
+                                            > 0
+                                        {
+                                            return true;
+                                        }
+                                    }
+                                }
+                                false
+                            })
+                            .map(|s| (s, creep.pos().get_range_to(s.pos())))
+                            .collect::<Vec<_>>();
+
+                        extensions.sort_by(|(_, a), (_, b)| a.cmp(b));
+
+                        let extension = extensions.first();
+                        if let Some(extension_data) = extension {
+                            if let StructureObject::StructureExtension(extension) = extension_data.0
+                            {
+                                switch(
+                                    creep.try_id().unwrap(),
+                                    Box::new(TransferTask::new(extension.id())),
+                                );
+                                return;
+                            }
+                        }
+
                         cancel(creep.try_id().unwrap());
                     });
             } else {
