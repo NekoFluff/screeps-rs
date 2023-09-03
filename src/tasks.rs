@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
 use log::*;
-use screeps::{game, Creep, MaybeHasTypedId, ObjectId};
+use screeps::{game, Creep, MaybeHasTypedId, ObjectId, SharedCreepProperties};
 
 mod build;
 mod harvest;
@@ -29,6 +29,8 @@ impl TaskManager {
     }
 
     pub fn add_task(&mut self, creep: &Creep, task: Box<dyn Task>) {
+        info!("{} was assigned to {:?}", creep.name(), task);
+
         self.tasks.insert(creep.try_id().unwrap(), task);
     }
 
@@ -56,20 +58,22 @@ impl TaskManager {
         }
         for completed_task in completed_tasks.borrow().iter() {
             info!(
-                "task completed: {:?}",
+                "{} completed {:?}",
+                game::get_object_by_id_typed(completed_task).unwrap().name(),
                 self.tasks.get(completed_task).unwrap()
             );
             self.tasks.remove(completed_task);
         }
         for cancelled_task in cancelled_tasks.borrow().iter() {
             info!(
-                "task cancelled: {:?}",
+                "{} did not successfully complete {:?}",
+                game::get_object_by_id_typed(cancelled_task).unwrap().name(),
                 self.tasks.get(cancelled_task).unwrap()
             );
             self.tasks.remove(cancelled_task);
         }
         for (creep_id, task) in switch_tasks.borrow_mut().drain() {
-            info!("{} task switched to: {:?}", creep_id, task);
+            info!("{}'s task was switched to {:?}", creep_id, task);
             self.tasks.insert(creep_id, task);
         }
     }

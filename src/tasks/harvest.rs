@@ -52,7 +52,7 @@ impl Debug for HarvestTask {
         if let Some(source) = self.target.resolve() {
             write!(
                 f,
-                "Harvest ({}, {}) [{}/{}]",
+                "Harvest at ({}, {}) [{}/{}]",
                 source.pos().x().u8(),
                 source.pos().y().u8(),
                 source.energy(),

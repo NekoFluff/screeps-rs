@@ -85,7 +85,6 @@ pub fn game_loop() {
 
             // Once they have enough energy, they can pick up a task
             let task = get_task_for_creep(&creep, &mut tasks);
-            info!("assigning {} to {:?}", creep.name(), task);
             let _ = js_sys::Reflect::set(
                 &creep.memory(),
                 &JsValue::from_str("task"),
@@ -99,12 +98,12 @@ pub fn game_loop() {
 
     spawn_creeps(target_creep_count);
 
-    // info!(
-    //     "Done! cpu: {} Peak Malloc: {}. Total Memory: {}",
-    //     game::cpu::get_used(),
-    //     game::cpu::get_heap_statistics().peak_malloced_memory(),
-    //     game::cpu::get_heap_statistics().total_heap_size()
-    // );
+    info!(
+        "Done! cpu: {} Peak Malloc: {}. Total Memory: {}",
+        game::cpu::get_used(),
+        game::cpu::get_heap_statistics().peak_malloced_memory(),
+        game::cpu::get_heap_statistics().total_heap_size()
+    );
 }
 
 fn spawn_creeps(target_creep_count: usize) {

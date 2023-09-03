@@ -54,7 +54,8 @@ impl Debug for HealTask {
         if let Some(target_creep) = self.target.resolve() {
             write!(
                 f,
-                "Heal ({}, {}) [{}/{}]",
+                "Heal {} at ({}, {}) [{}/{}]",
+                target_creep.name(),
                 target_creep.pos().x().u8(),
                 target_creep.pos().y().u8(),
                 target_creep.hits(),
