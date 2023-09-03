@@ -192,7 +192,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                             creep
                                 .transfer(&source, ResourceType::Energy, None)
                                 .unwrap_or_else(|e| {
-                                    warn!("couldn't transfer: {:?}", e);
+                                    warn!("couldn't transfer to spawn: {:?}", e);
                                     entry.remove();
                                 });
                         } else {
@@ -210,7 +210,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                             creep
                                 .transfer(&source, ResourceType::Energy, None)
                                 .unwrap_or_else(|e| {
-                                    warn!("couldn't transfer: {:?}", e);
+                                    warn!("couldn't transfer to extension: {:?}", e);
                                     entry.remove();
                                 });
                         } else {
@@ -228,7 +228,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                             creep
                                 .transfer(&source, ResourceType::Energy, None)
                                 .unwrap_or_else(|e| {
-                                    warn!("couldn't transfer: {:?}", e);
+                                    warn!("couldn't transfer to tower: {:?}", e);
                                     entry.remove();
                                 });
                         } else {
@@ -239,15 +239,15 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                     }
                 }
                 CreepTarget::Heal(creep_id) => {
-                    if let Some(creep) = creep_id.resolve() {
-                        if creep.hits() < creep.hits_max() {
-                            if creep.pos().is_near_to(creep.pos()) {
-                                creep.heal(&creep).unwrap_or_else(|e| {
+                    if let Some(creep2) = creep_id.resolve() {
+                        if creep2.hits() < creep2.hits_max() {
+                            if creep.pos().is_near_to(creep2.pos()) {
+                                creep.heal(&creep2).unwrap_or_else(|e| {
                                     warn!("couldn't heal: {:?}", e);
-                                    entry.remove();
                                 });
+                                entry.remove();
                             } else {
-                                let _ = creep.move_to(&creep);
+                                let _ = creep.move_to(&creep2);
                             }
                         } else {
                             entry.remove();
