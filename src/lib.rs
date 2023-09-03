@@ -341,27 +341,6 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                     }
                 }
 
-                // controller: if the number of creeps upgrading is less than 2, upgrade
-                if creeps_upgrading < 2 {
-                    for structure in structures.iter() {
-                        if let StructureObject::StructureController(controller) = structure {
-                            entry.insert(CreepTarget::Upgrade(controller.id()));
-                            return;
-                        }
-                    }
-                }
-
-                // general construction sites
-                if let Some(construction_site) = creep
-                    .pos()
-                    .find_closest_by_path(find::CONSTRUCTION_SITES, None)
-                {
-                    if let Some(id) = construction_site.try_id() {
-                        entry.insert(CreepTarget::Build(id));
-                        return;
-                    }
-                }
-
                 // healing
                 if creep.hits() < creep.hits_max() {
                     entry.insert(CreepTarget::Heal(creep.try_id().unwrap()));
@@ -379,6 +358,27 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                         }
                         let id = s.try_id().unwrap();
                         entry.insert(CreepTarget::Repair(id));
+                        return;
+                    }
+                }
+
+                // controller: if the number of creeps upgrading is less than 2, upgrade
+                if creeps_upgrading < 2 {
+                    for structure in structures.iter() {
+                        if let StructureObject::StructureController(controller) = structure {
+                            entry.insert(CreepTarget::Upgrade(controller.id()));
+                            return;
+                        }
+                    }
+                }
+
+                // general construction sites
+                if let Some(construction_site) = creep
+                    .pos()
+                    .find_closest_by_path(find::CONSTRUCTION_SITES, None)
+                {
+                    if let Some(id) = construction_site.try_id() {
+                        entry.insert(CreepTarget::Build(id));
                         return;
                     }
                 }
