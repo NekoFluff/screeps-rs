@@ -1,14 +1,28 @@
-use std::{hash::Hash, collections::HashMap, sync::Arc, rc::Rc, cell::RefCell};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
-use screeps::{Creep, ObjectId, HasPosition, SharedCreepProperties, game, MaybeHasTypedId};
 use log::*;
+use screeps::{game, Creep, MaybeHasTypedId, ObjectId};
+
+mod build;
+mod harvest;
+mod heal;
+mod repair;
+mod transfer;
+mod upgrade;
+
+pub use build::BuildTask;
+pub use harvest::HarvestTask;
+pub use heal::HealTask;
+pub use repair::RepairTask;
+pub use transfer::TransferTask;
+pub use upgrade::UpgradeTask;
 
 pub struct TaskManager {
     pub tasks: HashMap<ObjectId<Creep>, Box<dyn Task>>,
 }
 
 impl TaskManager {
-    fn new() -> TaskManager {
+    pub fn new() -> TaskManager {
         TaskManager {
             tasks: HashMap::new(),
         }
@@ -25,57 +39,35 @@ impl TaskManager {
             if let Some(creep) = game::get_object_by_id_typed(creep_id) {
                 let completed_tasks_clone = completed_tasks.clone();
                 let cancelled_tasks_clone = cancelled_tasks.clone();
-                task.execute(&creep,
-                     Box::new(move |creep_id| completed_tasks_clone.borrow_mut().push(creep_id)),
-                     Box::new(move |creep_id| cancelled_tasks_clone.borrow_mut().push(creep_id))
-                    );
+                task.execute(
+                    &creep,
+                    Box::new(move |creep_id| completed_tasks_clone.borrow_mut().push(creep_id)),
+                    Box::new(move |creep_id| cancelled_tasks_clone.borrow_mut().push(creep_id)),
+                );
             }
         }
         for completed_task in completed_tasks.borrow().iter() {
-            info!("task completed: {:?}", completed_task);
-            self.tasks.remove(&completed_task);
+            info!(
+                "task completed: {:?}",
+                self.tasks.get(completed_task).unwrap()
+            );
+            self.tasks.remove(completed_task);
         }
         for cancelled_task in cancelled_tasks.borrow().iter() {
-            info!("task cancelled: {:?}", cancelled_task);
-            self.tasks.remove(&cancelled_task);
+            info!(
+                "task cancelled: {:?}",
+                self.tasks.get(cancelled_task).unwrap()
+            );
+            self.tasks.remove(cancelled_task);
         }
     }
 }
 
-trait Task {
-    fn execute(&self, creep: &Creep, complete: Box<dyn FnOnce(ObjectId<Creep>)>, cancel: Box<dyn FnOnce(ObjectId<Creep>)>);
-}
-
-struct HealTask {
-    target: ObjectId<Creep>,
-}
-
-impl HealTask {
-    fn new(target: ObjectId<Creep>) -> HealTask {
-        HealTask {
-            target,
-        }
-    }
-}
-
-impl Task for HealTask {
-    fn execute(&self, creep: &Creep, complete: Box<dyn FnOnce(ObjectId<Creep>)>, cancel: Box<dyn FnOnce(ObjectId<Creep>)>) {
-        if let Some(target_creep) = self.target.resolve() {
-            if target_creep.hits() < target_creep.hits_max() {
-                if creep.pos().is_near_to(target_creep.pos()) {
-                    creep.heal(&target_creep).unwrap_or_else(|e| {
-                        warn!("couldn't heal: {:?}", e);
-                        cancel(creep.try_id().unwrap());
-                    });
-                    complete(creep.try_id().unwrap());
-                } else {
-                    let _ = creep.move_to(&target_creep);
-                }
-            } else {
-                cancel(creep.try_id().unwrap());
-            }
-        } else {
-            cancel(creep.try_id().unwrap());
-        }
-    }
+pub trait Task: Debug {
+    fn execute(
+        &self,
+        creep: &Creep,
+        complete: Box<dyn FnOnce(ObjectId<Creep>)>,
+        cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
+    );
 }
