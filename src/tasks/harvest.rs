@@ -42,7 +42,7 @@ impl super::Task for HarvestTask {
                 });
             } else {
                 creep.move_to(&source).unwrap_or_else(|_e| {
-                    // warn!("couldn't move to harvest: {:?}", e);
+                    // warn!("couldn't move to harvest: {:?}", _e);
 
                     let mut sources = room.find(find::SOURCES_ACTIVE, None);
                     sources.sort_by_key(|a| 0 - a.energy());

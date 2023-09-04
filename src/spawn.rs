@@ -8,6 +8,7 @@ pub struct SpawnGoal {
     pub body: Vec<Part>,
     pub additive_body: Vec<Part>,
     pub max_additions: u32,
+    pub source_modifier: u32, // how the # of additonal sources in the room affect the target count. it's a multiplier
     pub count: u32,
     pub is_global: bool,
 }
@@ -66,7 +67,11 @@ impl SpawnManager {
                     .unwrap()
                     .find(screeps::constants::find::SOURCES, None)
                     .len() as u32;
-                let target_count = spawn_goal.count * source_count;
+                let target_count = spawn_goal.count
+                    + std::cmp::max(
+                        spawn_goal.count * (source_count - 1) * spawn_goal.source_modifier,
+                        0,
+                    );
                 if creep_count < target_count {
                     let creep_name = format!("{}-{}-{}", spawn_goal.name, game::time(), additional);
                     let room = spawn.room().unwrap();
