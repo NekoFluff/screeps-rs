@@ -56,15 +56,11 @@ pub fn game_loop() {
                 Entry::Vacant(_) => true,
             })
             .collect::<Vec<Creep>>();
-        let idle_creep_count = idle_creeps.len();
 
         let mut flag_tasks = get_flag_tasks();
         let mut room_tasks_map = HashMap::new();
         for room in game::rooms().values() {
-            room_tasks_map.insert(
-                room.name(),
-                get_potential_creep_tasks(room, idle_creep_count * 2),
-            );
+            room_tasks_map.insert(room.name(), get_potential_creep_tasks(room));
         }
 
         for creep in idle_creeps {
@@ -107,7 +103,7 @@ pub fn game_loop() {
                 name: "worker".to_string(),
                 body: vec![Part::Work, Part::Carry, Part::Move],
                 additive_body: vec![Part::Work, Part::Carry, Part::Move],
-                count: 6,
+                count: 5,
             },
             SpawnGoal {
                 name: "melee".to_string(),
@@ -210,7 +206,7 @@ fn get_flag_tasks() -> Vec<Box<dyn Task>> {
     tasks
 }
 
-fn get_potential_creep_tasks(room: Room, max_tasks: usize) -> Vec<Box<dyn Task>> {
+fn get_potential_creep_tasks(room: Room) -> Vec<Box<dyn Task>> {
     let mut tasks: Vec<Box<dyn Task>> = Vec::new();
 
     let structures = room.find(find::STRUCTURES, None);
@@ -235,9 +231,6 @@ fn get_potential_creep_tasks(room: Room, max_tasks: usize) -> Vec<Box<dyn Task>>
             && controller.is_active()
         {
             tasks.push(Box::new(UpgradeTask::new(controller.id())));
-            if tasks.len() >= max_tasks {
-                return tasks;
-            }
         }
     }
 
@@ -251,9 +244,6 @@ fn get_potential_creep_tasks(room: Room, max_tasks: usize) -> Vec<Box<dyn Task>>
             {
                 if let Some(id) = tower.try_id() {
                     tasks.push(Box::new(TransferTask::new(id)));
-                    if tasks.len() >= max_tasks {
-                        return tasks;
-                    }
                 }
             }
         }
@@ -279,10 +269,6 @@ fn get_potential_creep_tasks(room: Room, max_tasks: usize) -> Vec<Box<dyn Task>>
         }
     }
 
-    if tasks.len() >= max_tasks {
-        return tasks;
-    }
-
     // spawn
     let spawns = structures
         .iter()
@@ -294,10 +280,6 @@ fn get_potential_creep_tasks(room: Room, max_tasks: usize) -> Vec<Box<dyn Task>>
             {
                 if let Some(id) = spawn.try_id() {
                     tasks.push(Box::new(TransferTask::new(id)));
-
-                    if tasks.len() >= max_tasks {
-                        return tasks;
-                    }
                 }
             }
         }
@@ -314,9 +296,6 @@ fn get_potential_creep_tasks(room: Room, max_tasks: usize) -> Vec<Box<dyn Task>>
     for construction_site in construction_sites.iter() {
         if let Some(id) = construction_site.try_id() {
             tasks.push(Box::new(BuildTask::new(id)));
-            if tasks.len() >= max_tasks {
-                return tasks;
-            }
         }
     }
 
@@ -339,9 +318,6 @@ fn get_potential_creep_tasks(room: Room, max_tasks: usize) -> Vec<Box<dyn Task>>
             }
             let id = s.try_id().unwrap();
             tasks.push(Box::new(RepairTask::new(id)));
-            if tasks.len() >= max_tasks {
-                return tasks;
-            }
         }
     }
 
