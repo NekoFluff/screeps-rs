@@ -8,9 +8,9 @@ use screeps::{
     find, game,
     objects::Creep,
     prelude::*,
-    BodyPart,
 };
 use screeps::{Room, RoomObjectProperties, StructureType};
+use spawn::{SpawnGoal, SpawnGoals, SpawnManager};
 use tasks::{
     AttackTask, BuildTask, HarvestTask, RepairTask, Task, TaskManager, TransferTask, TravelTask,
     UpgradeTask,
@@ -18,6 +18,7 @@ use tasks::{
 use wasm_bindgen::prelude::*;
 
 mod logging;
+mod spawn;
 mod tasks;
 
 // add wasm_bindgen to any function you would like to expose for call from js
@@ -76,7 +77,22 @@ pub fn game_loop() {
         task_manager.execute_tasks();
     });
 
-    spawn_creeps(target_creep_count);
+    let spawn_goals: SpawnGoals = vec![
+        SpawnGoal {
+            name: "worker".to_string(),
+            body: vec![Part::Work, Part::Carry, Part::Move],
+            additive_body: vec![Part::Work, Part::Carry, Part::Move],
+            count: 5,
+        },
+        SpawnGoal {
+            name: "melee".to_string(),
+            body: vec![Part::Move, Part::Attack, Part::Attack],
+            additive_body: vec![],
+            count: 2,
+        },
+    ];
+
+    SpawnManager::new(spawn_goals).spawn_creeps();
 
     let creeps = game::creeps().values().collect::<Vec<_>>();
 
@@ -118,84 +134,6 @@ fn execute_towers(room: &Room) {
 
         if let StructureObject::StructureTower(tower) = tower {
             let _ = tower.attack(enemy);
-        }
-    }
-}
-
-fn spawn_creeps(target_creep_count: usize) {
-    debug!("running spawns");
-    let mut additional = 0;
-
-    let creeps = game::creeps();
-    for spawn in game::spawns().values() {
-        let worker_creeps: Vec<Creep> = game::creeps()
-            .values()
-            .filter(|c| !c.name().starts_with("attacker"))
-            .collect();
-
-        if worker_creeps.len() < target_creep_count {
-            info!(
-                "running spawn {} [{}/{}]",
-                String::from(spawn.name()),
-                creeps.values().count(),
-                target_creep_count
-            );
-
-            let mut body = vec![Part::Move, Part::Move, Part::Carry, Part::Work];
-            let base_cost = body.iter().map(|p| p.cost()).sum::<u32>();
-            info!(
-                "energy: {}/{}",
-                spawn.room().unwrap().energy_available(),
-                spawn.room().unwrap().energy_capacity_available()
-            );
-
-            info!("base body cost: {}", base_cost);
-
-            if spawn.room().unwrap().energy_available() > base_cost {
-                let remaining_energy =
-                    std::cmp::max(spawn.room().unwrap().energy_available() - base_cost, 0);
-                let x = Part::Move.cost() + Part::Work.cost() + Part::Carry.cost() + 1;
-                let y = remaining_energy / x;
-                info!("adding {} move/work pairs", y);
-                for _ in 0..y {
-                    body.push(Part::Move);
-                    body.push(Part::Work);
-                    body.push(Part::Carry);
-                }
-            }
-
-            info!(
-                "new body cost: {}",
-                body.iter().map(|p| p.cost()).sum::<u32>()
-            );
-
-            if spawn.room().unwrap().energy_available() >= body.iter().map(|p| p.cost()).sum() {
-                // create a unique name, spawn.
-                let name_base = game::time();
-                let name = format!("{}-{}", name_base, additional);
-                // note that this bot has a fatal flaw; spawning a creep
-                // creates Memory.creeps[creep_name] which will build up forever;
-                // these memory entries should be prevented (todo doc link on how) or cleaned up
-                match spawn.spawn_creep(&body, &name) {
-                    Ok(()) => additional += 1,
-                    Err(e) => warn!("couldn't spawn: {:?}", e),
-                }
-            }
-        }
-
-        let attacker_creeps: Vec<Creep> = game::creeps()
-            .values()
-            .filter(|c| c.name().starts_with("attacker"))
-            .collect();
-
-        if attacker_creeps.len() < 2 {
-            let name_base = game::time();
-            let name = format!("attacker{} - {}", name_base, additional);
-            let body = vec![Part::Move, Part::Attack, Part::Attack, Part::Attack];
-            match spawn.spawn_creep(&body, &name) {
-                Ok(()) => additional += 1,
-                Err(e) => warn!("couldn't spawn attacker: {:?}", e),
-            }
         }
     }
 }
@@ -388,7 +326,7 @@ pub fn get_task_for_creep(
     if similar_tasks.is_empty() {
         if creep_parts.contains(&Part::Attack) {
             let controller = creep.room().unwrap().controller().unwrap();
-            if !creep.pos().is_near_to(controller.pos()) {
+            if !creep.pos().in_range_to(controller.pos(), 3) {
                 return Some(Box::new(TravelTask::new(controller.id())));
             } else {
                 return None;

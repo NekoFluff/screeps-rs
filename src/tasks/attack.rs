@@ -1,9 +1,7 @@
 use std::fmt::Debug;
 
 use log::*;
-use screeps::{
-    Creep, HasPosition, MaybeHasTypedId, ObjectId, Part, ResourceType, SharedCreepProperties,
-};
+use screeps::{Creep, HasPosition, MaybeHasTypedId, ObjectId, Part, SharedCreepProperties};
 
 pub struct AttackTask {
     target: ObjectId<Creep>,

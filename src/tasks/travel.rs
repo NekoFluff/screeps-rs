@@ -1,11 +1,7 @@
 use std::fmt::Debug;
 
-use js_sys::Object;
 use log::*;
-use screeps::{
-    Creep, ErrorCode, HasPosition, MaybeHasTypedId, ObjectId, Position, Resolvable, ResourceType,
-    SharedCreepProperties,
-};
+use screeps::{Creep, HasPosition, MaybeHasTypedId, ObjectId, Resolvable, SharedCreepProperties};
 
 pub struct TravelTask<T: HasPosition + Resolvable> {
     target: ObjectId<T>,
@@ -36,11 +32,15 @@ impl<T: HasPosition + Resolvable> super::Task for TravelTask<T> {
         }
 
         let target = target.unwrap();
+        if creep.pos().is_near_to(target.pos()) {
+            complete(creep.try_id().unwrap());
+            return;
+        }
+
         creep.move_to(target).unwrap_or_else(|e| {
             warn!("cant move to location: {:?}", e);
+            cancel(creep.try_id().unwrap());
         });
-
-        complete(creep.try_id().unwrap());
     }
 }
 
