@@ -104,18 +104,21 @@ pub fn game_loop() {
                 body: vec![Part::Work, Part::Carry, Part::Move],
                 additive_body: vec![Part::Work, Part::Carry, Part::Move],
                 count: 5,
+                is_global: false,
             },
             SpawnGoal {
                 name: "melee".to_string(),
                 body: vec![Part::Move, Part::Attack, Part::Attack],
                 additive_body: vec![],
                 count: 2,
+                is_global: false,
             },
             SpawnGoal {
                 name: "claimer".to_string(),
                 body: vec![Part::Claim, Part::Move],
                 additive_body: vec![],
-                count: if has_claim_task { 1 } else { 0 },
+                count: 1,
+                is_global: true,
             },
         ];
 

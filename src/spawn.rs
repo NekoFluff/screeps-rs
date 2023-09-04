@@ -1,6 +1,6 @@
 use crate::utils::get_creep_type;
 use log::*;
-use screeps::{game, Part, ResourceType};
+use screeps::{game, Part, ResourceType, RoomName};
 use std::collections::HashMap;
 
 pub struct SpawnGoal {
@@ -8,24 +8,21 @@ pub struct SpawnGoal {
     pub body: Vec<Part>,
     pub additive_body: Vec<Part>,
     pub count: u32,
+    pub is_global: bool,
 }
 
 pub type SpawnGoals = Vec<SpawnGoal>;
+pub type RoomCreepCounts = HashMap<RoomName, HashMap<String, u32>>;
 
 pub struct SpawnManager {
     pub spawn_goals: SpawnGoals,
+    pub room_creep_counts: RoomCreepCounts,
 }
 
 impl SpawnManager {
     pub fn new(spawn_goals: SpawnGoals) -> SpawnManager {
-        SpawnManager { spawn_goals }
-    }
-
-    pub fn spawn_creeps(&self) {
-        let mut additional = 0;
-
         let creeps = game::creeps();
-        let creeps_per_room_by_type = creeps.values().fold(HashMap::new(), |mut acc, creep| {
+        let room_creep_counts = creeps.values().fold(HashMap::new(), |mut acc, creep| {
             let creep_type = get_creep_type(&creep);
             let room_name = creep.room().unwrap().name();
             let count: &mut HashMap<String, u32> = acc.entry(room_name).or_default();
@@ -34,22 +31,25 @@ impl SpawnManager {
             acc
         });
 
+        SpawnManager {
+            spawn_goals,
+            room_creep_counts,
+        }
+    }
+
+    pub fn spawn_creeps(&self) {
+        let mut additional = 0;
+
         for spawn in game::spawns().values() {
-            // if (spawn.store().get_used_capacity(Some(ResourceType::Energy)) as f32)
-            //     / (spawn.store().get_capacity(Some(ResourceType::Energy)) as f32)
-            //     < 0.25
-            // {
-            //     continue;
-            // }
             let room_name = spawn.room().unwrap().name();
-            let creep_counts = creeps_per_room_by_type.get(&room_name);
+            let creep_counts = self.room_creep_counts.get(&room_name);
 
             for spawn_goal in self.spawn_goals.iter() {
-                let mut count = 0;
-                if let Some(creep_counts) = creep_counts {
-                    if let Some(creep_count) = creep_counts.get(&spawn_goal.name) {
-                        count = *creep_count;
-                    }
+                let mut creep_count = 0;
+                if spawn_goal.is_global {
+                    creep_count = self.get_global_creep_count(&spawn_goal.name);
+                } else {
+                    creep_count = self.get_creep_count_in_room(&room_name, &spawn_goal.name);
                 }
                 let source_count: u32 = spawn
                     .room()
@@ -57,8 +57,11 @@ impl SpawnManager {
                     .find(screeps::constants::find::SOURCES, None)
                     .len() as u32;
                 let target_count = spawn_goal.count * source_count;
-                if count < target_count {
-                    info!("Spawning {} [{}/{}]", spawn_goal.name, count, target_count);
+                if creep_count < target_count {
+                    info!(
+                        "Spawning {} [{}/{}]",
+                        spawn_goal.name, creep_count, target_count
+                    );
 
                     let creep_name = format!("{}-{}-{}", spawn_goal.name, game::time(), additional);
                     let room = spawn.room().unwrap();
@@ -96,5 +99,25 @@ impl SpawnManager {
                 }
             }
         }
+    }
+
+    pub fn get_creep_count_in_room(&self, room_name: &RoomName, creep_type: &str) -> u32 {
+        let creep_counts = self.room_creep_counts.get(room_name);
+        if let Some(creep_counts) = creep_counts {
+            if let Some(creep_count) = creep_counts.get(creep_type) {
+                return *creep_count;
+            }
+        }
+        0
+    }
+
+    pub fn get_global_creep_count(&self, creep_type: &str) -> u32 {
+        let mut count = 0;
+        for room_counts in self.room_creep_counts.values() {
+            if let Some(creep_count) = room_counts.get(creep_type) {
+                count += creep_count;
+            }
+        }
+        count
     }
 }
