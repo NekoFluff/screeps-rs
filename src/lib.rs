@@ -59,7 +59,7 @@ pub fn game_loop() {
                 body: vec![Part::Move, Part::Attack, Part::Attack],
                 additive_body: vec![],
                 max_additions: 0,
-                count: 1,
+                count: 2,
                 source_modifier: 0,
                 is_global: false,
             },

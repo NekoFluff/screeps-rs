@@ -15,7 +15,7 @@ impl<T: HasPosition + Resolvable> TravelTask<T> {
 
 impl<T: HasPosition + Resolvable> super::Task for TravelTask<T> {
     fn get_type(&self) -> super::TaskType {
-        super::TaskType::Move
+        super::TaskType::Travel
     }
 
     fn execute(

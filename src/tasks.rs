@@ -15,6 +15,7 @@ mod heal;
 mod repair;
 mod transfer;
 mod travel;
+mod travel_dumb;
 mod upgrade;
 
 pub use attack::AttackTask;
@@ -25,6 +26,7 @@ pub use heal::HealTask;
 pub use repair::RepairTask;
 pub use transfer::TransferTask;
 pub use travel::TravelTask;
+pub use travel_dumb::TravelDumbTask;
 pub use upgrade::UpgradeTask;
 use wasm_bindgen::JsValue;
 
@@ -235,11 +237,18 @@ impl TaskManager {
 
         // controller: if the downgrade time is less than 10000 ticks, upgrade
         if let Some(owner) = controller.owner() {
-            if owner.username() == "CrazyFluff"
-                && controller.ticks_to_downgrade() < 9000
-                && controller.is_active()
-            {
-                tasks.push(Box::new(UpgradeTask::new(controller.id())));
+            if owner.username() == "CrazyFluff" && controller.is_active() {
+                if controller.ticks_to_downgrade() < 9000 {
+                    tasks.push(Box::new(UpgradeTask::new(controller.id())));
+                }
+
+                if controller.level() < 2 {
+                    tasks.push(Box::new(UpgradeTask::new(controller.id())));
+                }
+
+                if controller.level() < 3 {
+                    tasks.push(Box::new(UpgradeTask::new(controller.id())));
+                }
             }
         }
 
@@ -444,6 +453,14 @@ fn get_default_task_for_creep(creep: &Creep) -> Option<Box<dyn Task>> {
     let creep_parts = creep.body().iter().map(|p| p.part()).collect::<Vec<Part>>();
 
     if creep_parts.contains(&Part::Attack) {
+        if let Some(defend_flag) = game::flags().values().find(|f| f.name() == "defend") {
+            if !creep.pos().in_range_to(defend_flag.pos(), 3) {
+                return Some(Box::new(TravelDumbTask::new(defend_flag.pos())));
+            } else {
+                return None;
+            }
+        }
+
         let controller = creep.room().unwrap().controller().unwrap();
         if !creep.pos().in_range_to(controller.pos(), 3) {
             return Some(Box::new(TravelTask::new(controller.id())));
@@ -527,6 +544,7 @@ pub enum TaskType {
     Transfer,
     Upgrade,
     Attack,
-    Move,
+    Travel,
     Claim,
+    TravelDumb,
 }
