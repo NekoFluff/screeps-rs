@@ -50,11 +50,14 @@ impl TaskManager {
 
     fn recalculate_working_creeps(&mut self) {
         let tasks = self.tasks.iter();
-
         self.working_creeps_by_room = tasks.fold(HashMap::new(), |mut acc, (creep_id, task)| {
-            let creep = game::get_object_by_id_typed(creep_id).unwrap();
-            let creep_type = get_creep_type(&creep);
+            let creep = game::get_object_by_id_typed(creep_id);
+            if (creep.is_none()) {
+                return acc;
+            }
 
+            let creep = creep.unwrap();
+            let creep_type = get_creep_type(&creep);
             let room_name = task
                 .get_target_pos()
                 .map(|p| p.room_name())
@@ -68,13 +71,15 @@ impl TaskManager {
     }
 
     pub fn add_task(&mut self, creep: &Creep, task: Box<dyn Task>) {
-        info!("{} was assigned to {:?}", creep.name(), task);
-        let _ = js_sys::Reflect::set(
-            &creep.memory(),
-            &JsValue::from_str("task"),
-            &JsValue::from_str(&format!("{:?}", task)),
-        );
-        self.tasks.insert(creep.try_id().unwrap(), task);
+        if let Some(creep_id) = creep.try_id() {
+            info!("{} was assigned to {:?}", creep.name(), task);
+            let _ = js_sys::Reflect::set(
+                &creep.memory(),
+                &JsValue::from_str("task"),
+                &JsValue::from_str(&format!("{:?}", task)),
+            );
+            self.tasks.insert(creep_id, task);
+        }
     }
 
     pub fn execute_tasks(&mut self) {
@@ -131,22 +136,27 @@ impl TaskManager {
         }
 
         for creep in idle_creeps {
+            let current_room = creep.room();
+            if current_room.is_none() {
+                continue;
+            }
+            let current_room = current_room.unwrap();
+
             if let Some(task) = get_task_for_creep(&creep, &mut flag_tasks) {
                 self.add_task(&creep, task);
                 continue;
             }
 
-            let room_tasks = room_tasks_map
-                .get_mut(&creep.room().unwrap().name())
-                .unwrap();
-            if let Some(task) = get_task_for_creep(&creep, room_tasks) {
-                self.add_task(&creep, task);
-                continue;
+            if let Some(room_tasks) = room_tasks_map.get_mut(&current_room.name()) {
+                if let Some(task) = get_task_for_creep(&creep, room_tasks) {
+                    self.add_task(&creep, task);
+                    continue;
+                }
             }
 
             let creep_type = get_creep_type(&creep);
             for (room_name, room_tasks) in room_tasks_map.iter_mut() {
-                if room_name == &creep.room().unwrap().name() {
+                if room_name == &current_room.name() {
                     continue;
                 }
 
@@ -176,7 +186,7 @@ impl TaskManager {
 
         for flag in flags {
             if flag.name().starts_with("claim", 0) {
-                let room_name = flag
+                let room_name: String = flag
                     .name()
                     .split(":")
                     .pop()
@@ -327,14 +337,28 @@ impl TaskManager {
         tasks
     }
 
-    fn get_idle_creeps(&mut self) -> Vec<Creep> {
+    fn get_idle_creeps(&self) -> Vec<Creep> {
         let creeps = game::creeps().values();
-        creeps
-            .filter(|c| match self.tasks.entry(c.try_id().unwrap()) {
-                Entry::Occupied(_) => false,
-                Entry::Vacant(_) => true,
-            })
-            .collect::<Vec<Creep>>()
+        let mut idle_creeps: Vec<Creep> = Vec::new();
+
+        for creep in creeps {
+            // Creep doesn't exist
+            let id = creep.try_id();
+            if id.is_none() {
+                continue;
+            }
+            let id = id.unwrap();
+
+            // Creep already has a task assigned
+            if let Some(_task) = self.tasks.get(&id) {
+                continue;
+            }
+
+            // Creep is idle
+            idle_creeps.push(creep.clone());
+        }
+
+        idle_creeps
     }
 }
 
@@ -373,7 +397,6 @@ fn get_task_for_creep(creep: &Creep, task_list: &mut Vec<Box<dyn Task>>) -> Opti
                 .iter()
                 .all(|p| creep_parts.contains(p))
         {
-            error!("found task: {:?}", task);
             similar_tasks.push((index, task));
             continue;
         } else if !similar_tasks.is_empty() {
