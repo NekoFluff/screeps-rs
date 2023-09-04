@@ -1,9 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::{hash_map::Entry, HashMap},
-    fmt::Debug,
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
 use log::*;
 use screeps::{
@@ -52,7 +47,7 @@ impl TaskManager {
         let tasks = self.tasks.iter();
         self.working_creeps_by_room = tasks.fold(HashMap::new(), |mut acc, (creep_id, task)| {
             let creep = game::get_object_by_id_typed(creep_id);
-            if (creep.is_none()) {
+            if creep.is_none() {
                 return acc;
             }
 
@@ -380,12 +375,12 @@ fn get_task_for_creep(creep: &Creep, task_list: &mut Vec<Box<dyn Task>>) -> Opti
                     if let Some(source) = sources.first() {
                         return Some(Box::new(HarvestTask::new(source.id())));
                     }
+                } else {
+                    // Go back to an owned room if we can't harvest in the current room
+                    return get_travel_home_task(creep);
                 }
             }
         }
-
-        // Go back to an owned room if we can't harvest in the current room
-        return get_travel_home_task(&creep.owner().username());
     }
 
     // (index, task)
@@ -457,21 +452,33 @@ fn get_default_task_for_creep(creep: &Creep) -> Option<Box<dyn Task>> {
     }
 
     if !utils::is_mine(&creep.room().unwrap()) {
-        return get_travel_home_task(&creep.owner().username());
+        return get_travel_home_task(creep);
     }
 
     None
 }
 
-fn get_travel_home_task(owner_username: &str) -> Option<Box<dyn Task>> {
+fn get_travel_home_task(creep: &Creep) -> Option<Box<dyn Task>> {
     let rooms = screeps::game::rooms().values();
-    let my_owned_rooms = rooms
+    let mut my_owned_rooms = rooms
         .filter(|room| {
             room.controller()
-                .map(|c| c.owner().is_some_and(|o| o.username() == owner_username))
+                .map(|c| {
+                    c.owner()
+                        .is_some_and(|o| o.username() == creep.owner().username())
+                })
                 .unwrap_or(false)
         })
         .collect::<Vec<_>>();
+
+    // Sort rooms by distance to creep (closest first)
+    // TODO: this is probably not the best way to do this but it works for now
+    my_owned_rooms.sort_by(|a, b| {
+        creep
+            .pos()
+            .get_range_to(a.controller().unwrap().pos())
+            .cmp(&creep.pos().get_range_to(b.controller().unwrap().pos()))
+    });
 
     if let Some(room) = my_owned_rooms.first() {
         Some(Box::new(TravelTask::new(room.controller().unwrap().id())))
