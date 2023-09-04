@@ -245,10 +245,6 @@ impl TaskManager {
                 if controller.level() < 2 {
                     tasks.push(Box::new(UpgradeTask::new(controller.id())));
                 }
-
-                if controller.level() < 3 {
-                    tasks.push(Box::new(UpgradeTask::new(controller.id())));
-                }
             }
         }
 
