@@ -77,12 +77,48 @@ pub fn game_loop() {
 
     spawn_creeps(target_creep_count);
 
+    let creeps = game::creeps().values().collect::<Vec<_>>();
+
+    if !creeps.is_empty() {
+        execute_towers(&creeps.get(0).unwrap().room().unwrap());
+    }
+
     info!(
         "Done! cpu: {} Peak Malloc: {}. Total Memory: {}",
         game::cpu::get_used(),
         game::cpu::get_heap_statistics().peak_malloced_memory(),
         game::cpu::get_heap_statistics().total_heap_size()
     );
+}
+
+fn execute_towers(room: &Room) {
+    let structures = room.find(find::MY_STRUCTURES, None);
+
+    let towers = structures
+        .iter()
+        .filter(|s| s.structure_type() == StructureType::Tower);
+
+    // get the closest enemies to each tower
+    for tower in towers {
+        let mut enemies = room.find(find::HOSTILE_CREEPS, None);
+
+        if enemies.is_empty() {
+            continue;
+        }
+
+        enemies.sort_by(|a, b| {
+            tower
+                .pos()
+                .get_range_to(a.pos())
+                .cmp(&tower.pos().get_range_to(b.pos()))
+        });
+
+        let enemy = enemies.first().unwrap();
+
+        if let StructureObject::StructureTower(tower) = tower {
+            let _ = tower.attack(enemy);
+        }
+    }
 }
 
 fn spawn_creeps(target_creep_count: usize) {
