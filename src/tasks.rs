@@ -121,7 +121,7 @@ impl TaskManager {
         }
     }
 
-    pub fn assign_tasks(&mut self) {
+    pub fn assign_tasks(&mut self) -> Vec<Box<dyn Task>> {
         self.recalculate_working_creeps();
         let idle_creeps = self.get_idle_creeps();
         let mut flag_tasks = self.get_flag_tasks();
@@ -155,13 +155,14 @@ impl TaskManager {
                     continue;
                 }
 
-                if let Some(working_creeps) = self.working_creeps_by_room.get(room_name) {
-                    if let Some(creep_count) = working_creeps.get(&creep_type) {
-                        if *creep_count > 3 {
-                            continue;
-                        }
-                    }
-                }
+                // Only send creeps to another room if they're not already working in that room
+                // if let Some(working_creeps) = self.working_creeps_by_room.get(room_name) {
+                //     if let Some(creep_count) = working_creeps.get(&creep_type) {
+                //         if *creep_count > 3 {
+                //             continue;
+                //         }
+                //     }
+                // }
 
                 if let Some(task) = get_task_for_creep(&creep, room_tasks) {
                     self.add_task(&creep, task);
@@ -173,6 +174,8 @@ impl TaskManager {
                 self.add_task(&creep, task)
             }
         }
+
+        flag_tasks
     }
 
     fn get_flag_tasks(&self) -> Vec<Box<dyn Task>> {
@@ -374,6 +377,10 @@ fn get_task_for_creep(creep: &Creep, task_list: &mut Vec<Box<dyn Task>>) -> Opti
 
                     if let Some(source) = sources.first() {
                         return Some(Box::new(HarvestTask::new(source.id())));
+                    } else {
+                        // There are no sources to gather from and the creep has no energy
+                        // so do nothing
+                        return None;
                     }
                 } else {
                     // Go back to an owned room if we can't harvest in the current room

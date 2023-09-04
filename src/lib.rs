@@ -35,11 +35,21 @@ pub fn game_loop() {
     );
 
     TASK_MANAGER.with(|task_manager_refcell| {
+        let mut task_manager = task_manager_refcell.borrow_mut();
+
+        let flag_tasks = task_manager.assign_tasks();
+        task_manager.execute_tasks();
+
+        let claim_task_exists = flag_tasks
+            .iter()
+            .any(|t| t.get_type() == tasks::TaskType::Claim);
+
         let spawn_goals: SpawnGoals = vec![
             SpawnGoal {
                 name: "worker".to_string(),
                 body: vec![Part::Work, Part::Carry, Part::Move],
                 additive_body: vec![Part::Work, Part::Carry, Part::Move],
+                max_additions: 5,
                 count: 5,
                 is_global: false,
             },
@@ -47,25 +57,21 @@ pub fn game_loop() {
                 name: "melee".to_string(),
                 body: vec![Part::Move, Part::Attack, Part::Attack],
                 additive_body: vec![],
-                count: 2,
+                max_additions: 0,
+                count: 0,
                 is_global: false,
             },
             SpawnGoal {
                 name: "claimer".to_string(),
                 body: vec![Part::Claim, Part::Move],
                 additive_body: vec![],
-                count: 1,
+                max_additions: 0,
+                count: if claim_task_exists { 1 } else { 0 },
                 is_global: true,
             },
         ];
 
         SpawnManager::new(spawn_goals).spawn_creeps();
-
-        let mut task_manager = task_manager_refcell.borrow_mut();
-
-        task_manager.assign_tasks();
-
-        task_manager.execute_tasks();
     });
 
     let creeps = game::creeps().values().collect::<Vec<_>>();

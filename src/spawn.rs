@@ -7,6 +7,7 @@ pub struct SpawnGoal {
     pub name: String,
     pub body: Vec<Part>,
     pub additive_body: Vec<Part>,
+    pub max_additions: u32,
     pub count: u32,
     pub is_global: bool,
 }
@@ -41,6 +42,10 @@ impl SpawnManager {
         let mut additional = 0;
 
         for spawn in game::spawns().values() {
+            if spawn.spawning().is_some() {
+                continue;
+            }
+
             let room_name = spawn.room().unwrap().name();
 
             if (spawn.store().get_free_capacity(Some(ResourceType::Energy)) > 0)
@@ -63,11 +68,6 @@ impl SpawnManager {
                     .len() as u32;
                 let target_count = spawn_goal.count * source_count;
                 if creep_count < target_count {
-                    info!(
-                        "Spawning {} [{}/{}]",
-                        spawn_goal.name, creep_count, target_count
-                    );
-
                     let creep_name = format!("{}-{}-{}", spawn_goal.name, game::time(), additional);
                     let room = spawn.room().unwrap();
                     let body_cost = spawn_goal.body.iter().map(|p| p.cost()).sum::<u32>();
@@ -83,7 +83,10 @@ impl SpawnManager {
                         if !spawn_goal.additive_body.is_empty() {
                             let remaining_energy =
                                 std::cmp::max(room.energy_available() - body_cost, 0);
-                            let times_to_add = remaining_energy / additive_parts_cost;
+                            let times_to_add = std::cmp::min(
+                                remaining_energy / additive_parts_cost,
+                                spawn_goal.max_additions,
+                            );
                             info!(
                                 "Upgrading the {} creep {} times for an additional {} energy",
                                 spawn_goal.name,
@@ -96,10 +99,18 @@ impl SpawnManager {
                                 }
                             }
                         }
+
+                        info!(
+                            "Spawning {} [{}/{}]",
+                            spawn_goal.name, creep_count, target_count
+                        );
+
                         match spawn.spawn_creep(&body_parts, &creep_name) {
                             Ok(()) => additional += 1,
                             Err(e) => warn!("couldn't spawn {}: {:?}", spawn_goal.name, e),
                         }
+
+                        break;
                     }
                 }
             }
