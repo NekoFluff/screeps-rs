@@ -1,6 +1,6 @@
 use crate::utils::get_creep_type;
 use log::*;
-use screeps::{game, Part, ResourceType, RoomName};
+use screeps::{game, Part, RoomName};
 use std::collections::HashMap;
 
 pub struct SpawnGoal {
@@ -42,15 +42,14 @@ impl SpawnManager {
 
         for spawn in game::spawns().values() {
             let room_name = spawn.room().unwrap().name();
-            let creep_counts = self.room_creep_counts.get(&room_name);
 
             for spawn_goal in self.spawn_goals.iter() {
-                let mut creep_count = 0;
-                if spawn_goal.is_global {
-                    creep_count = self.get_global_creep_count(&spawn_goal.name);
+                let creep_count = if spawn_goal.is_global {
+                    self.get_global_creep_count(&spawn_goal.name)
                 } else {
-                    creep_count = self.get_creep_count_in_room(&room_name, &spawn_goal.name);
-                }
+                    self.get_creep_count_in_room(&room_name, &spawn_goal.name)
+                };
+
                 let source_count: u32 = spawn
                     .room()
                     .unwrap()

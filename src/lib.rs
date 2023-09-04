@@ -1,20 +1,10 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::cell::RefCell;
 
 use log::*;
-use screeps::{
-    constants::{Part, ResourceType},
-    enums::StructureObject,
-    find, game,
-    objects::Creep,
-    prelude::*,
-    RoomName, RoomPosition,
-};
-use screeps::{Room, RoomObjectProperties, StructureType};
+use screeps::{constants::Part, enums::StructureObject, find, game};
+use screeps::{HasPosition, Room, RoomObjectProperties, StructureProperties, StructureType};
 use spawn::{SpawnGoal, SpawnGoals, SpawnManager};
-use tasks::{
-    AttackTask, BuildTask, ClaimTask, HarvestTask, RepairTask, Task, TaskManager, TransferTask,
-    TravelTask, UpgradeTask,
-};
+use tasks::TaskManager;
 use wasm_bindgen::prelude::*;
 
 mod logging;
