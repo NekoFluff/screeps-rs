@@ -68,8 +68,9 @@ pub fn game_loop() {
         }
 
         for creep in idle_creeps {
-            let task = get_task_for_creep(&creep, &mut tasks);
-            task_manager.add_task(&creep, task);
+            if let Some(task) = get_task_for_creep(&creep, &mut tasks) {
+                task_manager.add_task(&creep, task);
+            }
         }
 
         task_manager.execute_tasks();
@@ -342,7 +343,10 @@ fn get_potential_creep_tasks(
     creep_targets
 }
 
-pub fn get_task_for_creep(creep: &Creep, task_list: &mut Vec<Box<dyn Task>>) -> Box<dyn Task> {
+pub fn get_task_for_creep(
+    creep: &Creep,
+    task_list: &mut Vec<Box<dyn Task>>,
+) -> Option<Box<dyn Task>> {
     let creep_parts = creep.body().iter().map(|p| p.part()).collect::<Vec<Part>>();
 
     if creep_parts.contains(&Part::Work)
@@ -354,7 +358,7 @@ pub fn get_task_for_creep(creep: &Creep, task_list: &mut Vec<Box<dyn Task>>) -> 
             .find(find::SOURCES_ACTIVE, None)
             .get(0)
         {
-            return Box::new(HarvestTask::new(source.id()));
+            return Some(Box::new(HarvestTask::new(source.id())));
         }
     }
 
@@ -380,21 +384,25 @@ pub fn get_task_for_creep(creep: &Creep, task_list: &mut Vec<Box<dyn Task>>) -> 
         }
     }
 
+    // Default task
     if similar_tasks.is_empty() {
         if creep_parts.contains(&Part::Attack) {
-            return Box::new(TravelTask::new(
-                creep.room().unwrap().controller().unwrap().id(),
-            ));
+            let controller = creep.room().unwrap().controller().unwrap();
+            if !creep.pos().is_near_to(controller.pos()) {
+                return Some(Box::new(TravelTask::new(controller.id())));
+            } else {
+                return None;
+            }
         } else {
-            return Box::new(UpgradeTask::new(
+            return Some(Box::new(UpgradeTask::new(
                 creep.room().unwrap().controller().unwrap().id(),
-            ));
+            )));
         }
     }
     // info!("similar tasks: {:?}", similar_tasks);
 
     if similar_tasks.len() == 1 {
-        return task_list.remove(similar_tasks.get(0).unwrap().0);
+        return Some(task_list.remove(similar_tasks.get(0).unwrap().0));
     }
 
     // (index, distance to target)
@@ -414,5 +422,5 @@ pub fn get_task_for_creep(creep: &Creep, task_list: &mut Vec<Box<dyn Task>>) -> 
 
     let shortest_distance_idx = tasks_by_distance.first().unwrap().0;
 
-    task_list.remove(shortest_distance_idx)
+    Some(task_list.remove(shortest_distance_idx))
 }
