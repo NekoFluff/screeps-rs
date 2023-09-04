@@ -25,50 +25,67 @@ impl SpawnManager {
         let mut additional = 0;
 
         let creeps = game::creeps();
-        let creep_counts = creeps.values().fold(HashMap::new(), |mut acc, creep| {
-            *acc.entry(get_creep_type(&creep)).or_insert(0) += 1;
+        let creeps_per_room_by_type = creeps.values().fold(HashMap::new(), |mut acc, creep| {
+            let creep_type = get_creep_type(&creep);
+            let room_name = creep.room().unwrap().name();
+            let count: &mut HashMap<String, u32> = acc.entry(room_name).or_default();
+            let creep_count = count.entry(creep_type).or_insert(0);
+            *creep_count += 1;
             acc
         });
 
-        for spawn_goal in self.spawn_goals.iter() {
-            let count = creep_counts.get(&spawn_goal.name).unwrap_or(&0);
-            if *count < spawn_goal.count {
-                info!(
-                    "Spawning {} [{}/{}]",
-                    spawn_goal.name, count, spawn_goal.count
-                );
-                let spawn = game::spawns().values().next().unwrap();
-                let creep_name = format!("{}-{}-{}", spawn_goal.name, game::time(), additional);
-                let room = spawn.room().unwrap();
-                let body_cost = spawn_goal.body.iter().map(|p| p.cost()).sum::<u32>();
-                let additive_parts_cost = spawn_goal
-                    .additive_body
-                    .iter()
-                    .map(|p| p.cost())
-                    .sum::<u32>()
-                    + 1;
-                let mut body_parts = spawn_goal.body.clone();
+        for spawn in game::spawns().values() {
+            let room_name = spawn.room().unwrap().name();
+            let creep_counts = creeps_per_room_by_type.get(&room_name);
 
-                if room.energy_available() >= body_cost {
-                    if !spawn_goal.additive_body.is_empty() {
-                        let remaining_energy =
-                            std::cmp::max(room.energy_available() - body_cost, 0);
-                        let times_to_add = remaining_energy / additive_parts_cost;
-                        info!(
-                            "Upgrading the {} creep {} times for an additional {} energy",
-                            spawn_goal.name,
-                            times_to_add,
-                            times_to_add * (additive_parts_cost - 1)
-                        );
-                        for _ in 0..times_to_add {
-                            for part in spawn_goal.additive_body.iter() {
-                                body_parts.push(*part);
+            for spawn_goal in self.spawn_goals.iter() {
+                let mut count = 0;
+                if let Some(creep_counts) = creep_counts {
+                    if let Some(creep_count) = creep_counts.get(&spawn_goal.name) {
+                        count = *creep_count;
+                    }
+                }
+                let source_count: u32 = spawn
+                    .room()
+                    .unwrap()
+                    .find(screeps::constants::find::SOURCES, None)
+                    .len() as u32;
+                let target_count = spawn_goal.count * source_count;
+                if count < target_count {
+                    info!("Spawning {} [{}/{}]", spawn_goal.name, count, target_count);
+
+                    let creep_name = format!("{}-{}-{}", spawn_goal.name, game::time(), additional);
+                    let room = spawn.room().unwrap();
+                    let body_cost = spawn_goal.body.iter().map(|p| p.cost()).sum::<u32>();
+                    let additive_parts_cost = spawn_goal
+                        .additive_body
+                        .iter()
+                        .map(|p| p.cost())
+                        .sum::<u32>()
+                        + 1;
+                    let mut body_parts = spawn_goal.body.clone();
+
+                    if room.energy_available() >= body_cost {
+                        if !spawn_goal.additive_body.is_empty() {
+                            let remaining_energy =
+                                std::cmp::max(room.energy_available() - body_cost, 0);
+                            let times_to_add = remaining_energy / additive_parts_cost;
+                            info!(
+                                "Upgrading the {} creep {} times for an additional {} energy",
+                                spawn_goal.name,
+                                times_to_add,
+                                times_to_add * (additive_parts_cost - 1)
+                            );
+                            for _ in 0..times_to_add {
+                                for part in spawn_goal.additive_body.iter() {
+                                    body_parts.push(*part);
+                                }
                             }
                         }
-                    }
-                    match spawn.spawn_creep(&body_parts, &creep_name) {
-                        Ok(()) => additional += 1,
-                        Err(e) => warn!("couldn't spawn {}: {:?}", spawn_goal.name, e),
+                        match spawn.spawn_creep(&body_parts, &creep_name) {
+                            Ok(()) => additional += 1,
+                            Err(e) => warn!("couldn't spawn {}: {:?}", spawn_goal.name, e),
+                        }
                     }
                 }
             }

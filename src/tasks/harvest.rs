@@ -2,7 +2,8 @@ use std::fmt::Debug;
 
 use log::*;
 use screeps::{
-    Creep, HasPosition, MaybeHasTypedId, ObjectId, ResourceType, SharedCreepProperties, Source,
+    find, Creep, HasPosition, MaybeHasTypedId, ObjectId, ResourceType, SharedCreepProperties,
+    Source,
 };
 
 pub struct HarvestTask {
@@ -25,8 +26,9 @@ impl super::Task for HarvestTask {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        _switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
+        switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
     ) {
+        let room = creep.room().unwrap();
         if creep.store().get_free_capacity(Some(ResourceType::Energy)) == 0 {
             complete(creep.try_id().unwrap());
             return;
@@ -39,7 +41,22 @@ impl super::Task for HarvestTask {
                     cancel(creep.try_id().unwrap());
                 });
             } else {
-                let _ = creep.move_to(&source);
+                creep.move_to(&source).unwrap_or_else(|_e| {
+                    // warn!("couldn't move to harvest: {:?}", e);
+
+                    let mut sources = room.find(find::SOURCES_ACTIVE, None);
+                    sources.sort_by_key(|a| 0 - a.energy());
+
+                    for new_source in sources {
+                        if source.try_id().unwrap() != new_source.try_id().unwrap() {
+                            switch(
+                                creep.try_id().unwrap(),
+                                Box::new(HarvestTask::new(new_source.try_id().unwrap())),
+                            );
+                            return;
+                        }
+                    }
+                });
             }
         } else {
             cancel(creep.try_id().unwrap());

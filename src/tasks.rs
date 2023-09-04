@@ -5,6 +5,7 @@ use screeps::{game, Creep, MaybeHasTypedId, ObjectId, Part, SharedCreepPropertie
 
 mod attack;
 mod build;
+mod claim;
 mod harvest;
 mod heal;
 mod repair;
@@ -14,6 +15,7 @@ mod upgrade;
 
 pub use attack::AttackTask;
 pub use build::BuildTask;
+pub use claim::ClaimTask;
 pub use harvest::HarvestTask;
 pub use heal::HealTask;
 pub use repair::RepairTask;
@@ -122,4 +124,5 @@ pub enum TaskType {
     Upgrade,
     Attack,
     Move,
+    Claim,
 }
