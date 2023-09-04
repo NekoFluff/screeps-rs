@@ -42,6 +42,10 @@ impl<T: HasPosition + Resolvable> super::Task for TravelTask<T> {
             cancel(creep.try_id().unwrap());
         });
     }
+
+    fn get_target_pos(&self) -> Option<screeps::Position> {
+        self.target.resolve().map(|target| target.pos())
+    }
 }
 
 impl<T: HasPosition + Resolvable> Debug for TravelTask<T> {

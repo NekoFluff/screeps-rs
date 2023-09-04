@@ -47,6 +47,10 @@ impl super::Task for BuildTask {
             cancel(creep.try_id().unwrap());
         }
     }
+
+    fn get_target_pos(&self) -> Option<screeps::Position> {
+        self.target.resolve().map(|target| target.pos())
+    }
 }
 
 impl Debug for BuildTask {

@@ -51,6 +51,10 @@ impl super::Task for AttackTask {
     fn requires_body_parts(&self) -> Vec<Part> {
         vec![Part::Attack]
     }
+
+    fn get_target_pos(&self) -> Option<screeps::Position> {
+        self.target.resolve().map(|target| target.pos())
+    }
 }
 
 impl Debug for AttackTask {

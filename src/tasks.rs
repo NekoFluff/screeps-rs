@@ -33,15 +33,38 @@ pub use travel::TravelTask;
 pub use upgrade::UpgradeTask;
 use wasm_bindgen::JsValue;
 
+use crate::utils::get_creep_type;
+
 pub struct TaskManager {
     pub tasks: HashMap<ObjectId<Creep>, Box<dyn Task>>,
+    working_creeps_by_room: HashMap<RoomName, HashMap<String, u32>>,
 }
 
 impl TaskManager {
     pub fn new() -> TaskManager {
         TaskManager {
             tasks: HashMap::new(),
+            working_creeps_by_room: HashMap::new(),
         }
+    }
+
+    fn recalculate_working_creeps(&mut self) {
+        let tasks = self.tasks.iter();
+
+        self.working_creeps_by_room = tasks.fold(HashMap::new(), |mut acc, (creep_id, task)| {
+            let creep = game::get_object_by_id_typed(creep_id).unwrap();
+            let creep_type = get_creep_type(&creep);
+
+            let room_name = task
+                .get_target_pos()
+                .map(|p| p.room_name())
+                .unwrap_or(creep.room().unwrap().name());
+
+            let count: &mut HashMap<String, u32> = acc.entry(room_name).or_default();
+            let creep_count = count.entry(creep_type).or_insert(0);
+            *creep_count += 1;
+            acc
+        });
     }
 
     pub fn add_task(&mut self, creep: &Creep, task: Box<dyn Task>) {
@@ -99,6 +122,7 @@ impl TaskManager {
     }
 
     pub fn assign_tasks(&mut self) {
+        self.recalculate_working_creeps();
         let idle_creeps = self.get_idle_creeps();
         let mut flag_tasks = self.get_flag_tasks();
         let mut room_tasks_map = HashMap::new();
@@ -120,9 +144,18 @@ impl TaskManager {
                 continue;
             }
 
+            let creep_type = get_creep_type(&creep);
             for (room_name, room_tasks) in room_tasks_map.iter_mut() {
                 if room_name == &creep.room().unwrap().name() {
                     continue;
+                }
+
+                if let Some(working_creeps) = self.working_creeps_by_room.get(room_name) {
+                    if let Some(creep_count) = working_creeps.get(&creep_type) {
+                        if *creep_count > 3 {
+                            continue;
+                        }
+                    }
                 }
 
                 if let Some(task) = get_task_for_creep(&creep, room_tasks) {

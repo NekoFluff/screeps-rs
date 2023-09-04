@@ -59,6 +59,10 @@ impl super::Task for ClaimTask {
             });
         }
     }
+
+    fn get_target_pos(&self) -> Option<screeps::Position> {
+        Some(self.target.pos())
+    }
 }
 
 impl Debug for ClaimTask {

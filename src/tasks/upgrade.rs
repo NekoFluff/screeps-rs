@@ -49,6 +49,10 @@ impl super::Task for UpgradeTask {
             cancel(creep.try_id().unwrap());
         }
     }
+
+    fn get_target_pos(&self) -> Option<screeps::Position> {
+        self.target.resolve().map(|target| target.pos())
+    }
 }
 
 impl Debug for UpgradeTask {
