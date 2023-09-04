@@ -46,16 +46,16 @@ impl super::Task for ClaimTask {
 
             if creep.pos().is_near_to(controller.pos()) {
                 creep.claim_controller(&controller).unwrap_or_else(|e| {
-                    warn!("couldn't claim controller: {:?}", e);
+                    info!("couldn't claim controller: {:?}", e);
                 });
             } else {
                 creep.move_to(&controller).unwrap_or_else(|e| {
-                    warn!("couldn't move to controller: {:?}", e);
+                    info!("couldn't move to controller: {:?}", e);
                 });
             }
         } else {
             creep.move_to(room_pos.clone()).unwrap_or_else(|e| {
-                warn!("couldn't move to other room: {:?}", e);
+                info!("couldn't move to other room: {:?}", e);
             });
         }
     }

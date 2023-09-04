@@ -39,7 +39,7 @@ impl super::Task for BuildTask {
                     let _ = creep.move_to(&construction_site);
                 }
                 _ => {
-                    warn!("couldn't build: {:?}", e);
+                    info!("couldn't build: {:?}", e);
                     cancel(creep.try_id().unwrap());
                 }
             });

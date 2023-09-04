@@ -37,12 +37,12 @@ impl super::Task for HarvestTask {
         if let Some(source) = self.target.resolve() {
             if creep.pos().is_near_to(source.pos()) {
                 creep.harvest(&source).unwrap_or_else(|e| {
-                    warn!("couldn't harvest: {:?}", e);
+                    info!("couldn't harvest: {:?}", e);
                     cancel(creep.try_id().unwrap());
                 });
             } else {
                 creep.move_to(&source).unwrap_or_else(|_e| {
-                    // warn!("couldn't move to harvest: {:?}", _e);
+                    // info!("couldn't move to harvest: {:?}", _e);
 
                     let mut sources = room.find(find::SOURCES_ACTIVE, None);
                     sources.sort_by_key(|a| 0 - a.energy());

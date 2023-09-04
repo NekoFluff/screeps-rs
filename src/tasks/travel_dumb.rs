@@ -33,7 +33,7 @@ impl super::Task for TravelDumbTask {
         }
 
         creep.move_to(self.target).unwrap_or_else(|e| {
-            warn!("cant move to location: {:?}", e);
+            debug!("cant move to location: {:?}", e);
             cancel(creep.try_id().unwrap());
         });
     }

@@ -41,7 +41,7 @@ impl super::Task for UpgradeTask {
                         let _ = creep.move_to(&controller);
                     }
                     _ => {
-                        warn!("couldn't upgrade: {:?}", e);
+                        info!("couldn't upgrade: {:?}", e);
                         cancel(creep.try_id().unwrap());
                     }
                 });

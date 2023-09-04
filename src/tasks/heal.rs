@@ -34,7 +34,7 @@ impl super::Task for HealTask {
             if target_creep.hits() < target_creep.hits_max() {
                 if creep.pos().is_near_to(target_creep.pos()) {
                     creep.heal(&target_creep).unwrap_or_else(|e| {
-                        warn!("couldn't heal: {:?}", e);
+                        info!("couldn't heal: {:?}", e);
                         cancel(creep.try_id().unwrap());
                     });
                 } else {

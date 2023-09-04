@@ -27,7 +27,7 @@ impl super::Task for AttackTask {
     ) {
         let target_creep = self.target.resolve();
         if target_creep.is_none() {
-            warn!("cannot attack nonexistent creep");
+            info!("cannot attack nonexistent creep");
             cancel(creep.try_id().unwrap());
             return;
         }
@@ -37,7 +37,7 @@ impl super::Task for AttackTask {
         if target_creep.hits() > 0 {
             if creep.pos().is_near_to(target_creep.pos()) {
                 creep.attack(&target_creep).unwrap_or_else(|e| {
-                    warn!("failed to attack creep: {:?}", e);
+                    info!("failed to attack creep: {:?}", e);
                     cancel(creep.try_id().unwrap());
                 });
             } else {

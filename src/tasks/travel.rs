@@ -38,7 +38,7 @@ impl<T: HasPosition + Resolvable> super::Task for TravelTask<T> {
         }
 
         creep.move_to(target).unwrap_or_else(|e| {
-            warn!("cant move to location: {:?}", e);
+            debug!("cant move to location: {:?}", e);
             cancel(creep.try_id().unwrap());
         });
     }

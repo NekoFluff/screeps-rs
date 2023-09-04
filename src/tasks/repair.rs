@@ -35,7 +35,7 @@ impl super::Task for RepairTask {
         if let Some(structure) = self.target.resolve() {
             if creep.pos().is_near_to(structure.pos()) {
                 creep.repair(&structure).unwrap_or_else(|e| {
-                    warn!("couldn't repair: {:?}", e);
+                    info!("couldn't repair: {:?}", e);
                 });
                 if structure.hits() >= structure.hits_max()
                     || creep.store().get_used_capacity(Some(ResourceType::Energy)) == 0

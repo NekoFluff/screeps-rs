@@ -92,7 +92,7 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
             creep
                 .transfer(&target, ResourceType::Energy, None)
                 .unwrap_or_else(|e| {
-                    warn!("couldn't transfer: {:?}", e);
+                    info!("couldn't transfer: {:?}", e);
 
                     if let Some(extension_id) = self.get_nearest_extension(creep) {
                         switch(

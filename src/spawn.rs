@@ -112,7 +112,7 @@ impl SpawnManager {
 
                         match spawn.spawn_creep(&body_parts, &creep_name) {
                             Ok(()) => additional += 1,
-                            Err(e) => warn!("couldn't spawn {}: {:?}", spawn_goal.name, e),
+                            Err(e) => debug!("couldn't spawn {}: {:?}", spawn_goal.name, e),
                         }
 
                         break;
