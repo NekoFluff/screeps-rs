@@ -178,7 +178,6 @@ fn get_flag_tasks() -> Vec<Box<dyn Task>> {
                 .pop()
                 .as_string()
                 .unwrap_or("".to_string());
-            info!("claiming room v1 {}", room_name);
 
             if let Ok(room_name) = RoomName::new(&room_name) {
                 // if the room is already owned, remove the flag
@@ -191,8 +190,6 @@ fn get_flag_tasks() -> Vec<Box<dyn Task>> {
                         }
                     }
                 }
-
-                info!("claiming room v2 {}", room_name);
 
                 let room_pos = RoomPosition::new(25, 25, room_name);
                 tasks.push(Box::new(ClaimTask::new(room_pos)));

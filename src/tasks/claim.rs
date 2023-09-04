@@ -34,7 +34,6 @@ impl super::Task for ClaimTask {
     ) {
         let room_pos = &self.target;
         let current_room = creep.room().unwrap();
-        info!("claiming room v3 {}", room_pos.room_name());
 
         if current_room.name() == room_pos.room_name() {
             let controller = current_room.controller().unwrap();
@@ -44,7 +43,6 @@ impl super::Task for ClaimTask {
                     return;
                 }
             }
-            info!("claiming room v4 {}", room_pos.room_name());
 
             if creep.pos().is_near_to(controller.pos()) {
                 creep.claim_controller(&controller).unwrap_or_else(|e| {
@@ -56,8 +54,6 @@ impl super::Task for ClaimTask {
                 });
             }
         } else {
-            info!("claiming room v5 {}", room_pos.room_name());
-
             creep.move_to(room_pos.clone()).unwrap_or_else(|e| {
                 warn!("couldn't move to other room: {:?}", e);
             });
