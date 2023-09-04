@@ -119,7 +119,9 @@ impl TaskManager {
         }
         for (creep_id, task) in switch_tasks.borrow_mut().drain() {
             info!("{}'s task was switched to {:?}", creep_id, task);
-            self.tasks.insert(creep_id, task);
+            if let Some(creep) = game::get_object_by_id_typed(&creep_id) {
+                self.add_task(&creep, task);
+            }
         }
     }
 
