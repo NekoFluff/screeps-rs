@@ -1,0 +1,60 @@
+use std::fmt::Debug;
+
+use js_sys::Object;
+use log::*;
+use screeps::{
+    Creep, ErrorCode, HasPosition, MaybeHasTypedId, ObjectId, Position, Resolvable, ResourceType,
+    SharedCreepProperties,
+};
+
+pub struct TravelTask<T: HasPosition + Resolvable> {
+    target: ObjectId<T>,
+}
+
+impl<T: HasPosition + Resolvable> TravelTask<T> {
+    pub fn new(target: ObjectId<T>) -> TravelTask<T> {
+        TravelTask { target }
+    }
+}
+
+impl<T: HasPosition + Resolvable> super::Task for TravelTask<T> {
+    fn get_type(&self) -> super::TaskType {
+        super::TaskType::Move
+    }
+
+    fn execute(
+        &self,
+        creep: &Creep,
+        complete: Box<dyn FnOnce(ObjectId<Creep>)>,
+        cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
+        _switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
+    ) {
+        let target = self.target.resolve();
+        if target.is_none() {
+            cancel(creep.try_id().unwrap());
+            return;
+        }
+
+        let target = target.unwrap();
+        creep.move_to(target).unwrap_or_else(|e| {
+            warn!("cant move to location: {:?}", e);
+        });
+
+        complete(creep.try_id().unwrap());
+    }
+}
+
+impl<T: HasPosition + Resolvable> Debug for TravelTask<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(target) = self.target.resolve() {
+            write!(
+                f,
+                "Travel to ({}, {})",
+                target.pos().x().u8(),
+                target.pos().y().u8()
+            )
+        } else {
+            write!(f, "Travel to unknown target")
+        }
+    }
+}

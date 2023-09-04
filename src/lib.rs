@@ -8,9 +8,13 @@ use screeps::{
     find, game,
     objects::Creep,
     prelude::*,
+    BodyPart,
 };
 use screeps::{Room, RoomObjectProperties, StructureType};
-use tasks::{BuildTask, HarvestTask, RepairTask, Task, TaskManager, TransferTask, UpgradeTask};
+use tasks::{
+    AttackTask, BuildTask, HarvestTask, RepairTask, Task, TaskManager, TransferTask, TravelTask,
+    UpgradeTask,
+};
 use wasm_bindgen::prelude::*;
 
 mod logging;
@@ -64,32 +68,7 @@ pub fn game_loop() {
         }
 
         for creep in idle_creeps {
-            // Idle creeps should always harvest energy first
-            if creep.store().get_used_capacity(Some(ResourceType::Energy)) == 0 {
-                if let Some(source) = creep
-                    .room()
-                    .unwrap()
-                    .find(find::SOURCES_ACTIVE, None)
-                    .get(0)
-                {
-                    let task = HarvestTask::new(source.id());
-                    let _ = js_sys::Reflect::set(
-                        &creep.memory(),
-                        &JsValue::from_str("task"),
-                        &JsValue::from_str(&format!("{:?}", task)),
-                    );
-                    task_manager.add_task(&creep, Box::new(task));
-                    return;
-                }
-            }
-
-            // Once they have enough energy, they can pick up a task
             let task = get_task_for_creep(&creep, &mut tasks);
-            let _ = js_sys::Reflect::set(
-                &creep.memory(),
-                &JsValue::from_str("task"),
-                &JsValue::from_str(&format!("{:?}", task)),
-            );
             task_manager.add_task(&creep, task);
         }
 
@@ -112,54 +91,73 @@ fn spawn_creeps(target_creep_count: usize) {
 
     let creeps = game::creeps();
     for spawn in game::spawns().values() {
-        if creeps.values().count() >= target_creep_count {
-            break;
-        }
-        info!(
-            "running spawn {} [{}/{}]",
-            String::from(spawn.name()),
-            creeps.values().count(),
-            target_creep_count
-        );
+        let worker_creeps: Vec<Creep> = game::creeps()
+            .values()
+            .filter(|c| !c.name().starts_with("attacker"))
+            .collect();
 
-        let mut body = vec![Part::Move, Part::Move, Part::Carry, Part::Work];
-        let base_cost = body.iter().map(|p| p.cost()).sum::<u32>();
-        info!(
-            "energy: {}/{}",
-            spawn.room().unwrap().energy_available(),
-            spawn.room().unwrap().energy_capacity_available()
-        );
+        if worker_creeps.len() < target_creep_count {
+            info!(
+                "running spawn {} [{}/{}]",
+                String::from(spawn.name()),
+                creeps.values().count(),
+                target_creep_count
+            );
 
-        info!("base body cost: {}", base_cost);
+            let mut body = vec![Part::Move, Part::Move, Part::Carry, Part::Work];
+            let base_cost = body.iter().map(|p| p.cost()).sum::<u32>();
+            info!(
+                "energy: {}/{}",
+                spawn.room().unwrap().energy_available(),
+                spawn.room().unwrap().energy_capacity_available()
+            );
 
-        if spawn.room().unwrap().energy_available() > base_cost {
-            let remaining_energy =
-                std::cmp::max(spawn.room().unwrap().energy_available() - base_cost, 0);
-            let x = Part::Move.cost() + Part::Work.cost() + Part::Carry.cost() + 1;
-            let y = remaining_energy / x;
-            info!("adding {} move/work pairs", y);
-            for _ in 0..y {
-                body.push(Part::Move);
-                body.push(Part::Work);
-                body.push(Part::Carry);
+            info!("base body cost: {}", base_cost);
+
+            if spawn.room().unwrap().energy_available() > base_cost {
+                let remaining_energy =
+                    std::cmp::max(spawn.room().unwrap().energy_available() - base_cost, 0);
+                let x = Part::Move.cost() + Part::Work.cost() + Part::Carry.cost() + 1;
+                let y = remaining_energy / x;
+                info!("adding {} move/work pairs", y);
+                for _ in 0..y {
+                    body.push(Part::Move);
+                    body.push(Part::Work);
+                    body.push(Part::Carry);
+                }
+            }
+
+            info!(
+                "new body cost: {}",
+                body.iter().map(|p| p.cost()).sum::<u32>()
+            );
+
+            if spawn.room().unwrap().energy_available() >= body.iter().map(|p| p.cost()).sum() {
+                // create a unique name, spawn.
+                let name_base = game::time();
+                let name = format!("{}-{}", name_base, additional);
+                // note that this bot has a fatal flaw; spawning a creep
+                // creates Memory.creeps[creep_name] which will build up forever;
+                // these memory entries should be prevented (todo doc link on how) or cleaned up
+                match spawn.spawn_creep(&body, &name) {
+                    Ok(()) => additional += 1,
+                    Err(e) => warn!("couldn't spawn: {:?}", e),
+                }
             }
         }
 
-        info!(
-            "new body cost: {}",
-            body.iter().map(|p| p.cost()).sum::<u32>()
-        );
+        let attacker_creeps: Vec<Creep> = game::creeps()
+            .values()
+            .filter(|c| c.name().starts_with("attacker"))
+            .collect();
 
-        if spawn.room().unwrap().energy_available() >= body.iter().map(|p| p.cost()).sum() {
-            // create a unique name, spawn.
+        if attacker_creeps.len() < 2 {
             let name_base = game::time();
-            let name = format!("{}-{}", name_base, additional);
-            // note that this bot has a fatal flaw; spawning a creep
-            // creates Memory.creeps[creep_name] which will build up forever;
-            // these memory entries should be prevented (todo doc link on how) or cleaned up
+            let name = format!("attacker{} - {}", name_base, additional);
+            let body = vec![Part::Move, Part::Attack, Part::Attack, Part::Attack];
             match spawn.spawn_creep(&body, &name) {
                 Ok(()) => additional += 1,
-                Err(e) => warn!("couldn't spawn: {:?}", e),
+                Err(e) => warn!("couldn't spawn attacker: {:?}", e),
             }
         }
     }
@@ -175,6 +173,20 @@ fn get_potential_creep_tasks(
     let structures = room.find(find::STRUCTURES, None);
     let construction_sites = room.find(find::CONSTRUCTION_SITES, None);
     let controller = room.controller();
+    let enemy_creeps = room.find(find::HOSTILE_CREEPS, None);
+
+    // attack
+    if !enemy_creeps.is_empty() {
+        for enemy_creep in enemy_creeps {
+            if let Some(id) = enemy_creep.try_id() {
+                creep_targets.push(Box::new(AttackTask::new(id)));
+                creep_targets.push(Box::new(AttackTask::new(id)));
+                if creep_targets.len() >= max_tasks {
+                    return creep_targets;
+                }
+            }
+        }
+    }
 
     // controller: if the downgrade time is less than 10000 ticks, upgrade
     if let Some(c) = controller {
@@ -295,23 +307,52 @@ fn get_potential_creep_tasks(
 }
 
 pub fn get_task_for_creep(creep: &Creep, task_list: &mut Vec<Box<dyn Task>>) -> Box<dyn Task> {
-    let task = task_list.get(0);
+    let creep_parts = creep.body().iter().map(|p| p.part()).collect::<Vec<Part>>();
 
-    if task.is_none() {
-        return Box::new(UpgradeTask::new(
-            creep.room().unwrap().controller().unwrap().id(),
-        ));
+    if creep_parts.contains(&Part::Work)
+        && creep.store().get_used_capacity(Some(ResourceType::Energy)) == 0
+    {
+        if let Some(source) = creep
+            .room()
+            .unwrap()
+            .find(find::SOURCES_ACTIVE, None)
+            .get(0)
+        {
+            return Box::new(HarvestTask::new(source.id()));
+        }
     }
-
-    let task = task.unwrap();
 
     // (index, task)
     let mut similar_tasks: Vec<(usize, &Box<dyn Task>)> = vec![];
-    for (index, task2) in task_list.iter().enumerate() {
-        if task.get_type() == task2.get_type() {
-            similar_tasks.push((index, task2));
+    for (index, task) in task_list.iter().enumerate() {
+        if similar_tasks.is_empty()
+            && task
+                .requires_body_parts()
+                .iter()
+                .all(|p| creep_parts.contains(p))
+        {
+            error!("found task: {:?}", task);
+            similar_tasks.push((index, task));
+            continue;
+        } else if !similar_tasks.is_empty() {
+            let first_task = similar_tasks.get(0).unwrap().1;
+            if task.get_type() == first_task.get_type() {
+                similar_tasks.push((index, task));
+            } else {
+                break;
+            }
+        }
+    }
+
+    if similar_tasks.is_empty() {
+        if creep_parts.contains(&Part::Attack) {
+            return Box::new(TravelTask::new(
+                creep.room().unwrap().controller().unwrap().id(),
+            ));
         } else {
-            break;
+            return Box::new(UpgradeTask::new(
+                creep.room().unwrap().controller().unwrap().id(),
+            ));
         }
     }
     // info!("similar tasks: {:?}", similar_tasks);

@@ -1,21 +1,26 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
 use log::*;
-use screeps::{game, Creep, MaybeHasTypedId, ObjectId, SharedCreepProperties};
+use screeps::{game, Creep, MaybeHasTypedId, ObjectId, Part, SharedCreepProperties};
 
+mod attack;
 mod build;
 mod harvest;
 mod heal;
 mod repair;
 mod transfer;
+mod travel;
 mod upgrade;
 
+pub use attack::AttackTask;
 pub use build::BuildTask;
 pub use harvest::HarvestTask;
 pub use heal::HealTask;
 pub use repair::RepairTask;
 pub use transfer::TransferTask;
+pub use travel::TravelTask;
 pub use upgrade::UpgradeTask;
+use wasm_bindgen::JsValue;
 
 pub struct TaskManager {
     pub tasks: HashMap<ObjectId<Creep>, Box<dyn Task>>,
@@ -30,7 +35,11 @@ impl TaskManager {
 
     pub fn add_task(&mut self, creep: &Creep, task: Box<dyn Task>) {
         info!("{} was assigned to {:?}", creep.name(), task);
-
+        let _ = js_sys::Reflect::set(
+            &creep.memory(),
+            &JsValue::from_str("task"),
+            &JsValue::from_str(&format!("{:?}", task)),
+        );
         self.tasks.insert(creep.try_id().unwrap(), task);
     }
 
@@ -97,6 +106,10 @@ pub trait Task: Debug {
     }
 
     fn get_type(&self) -> TaskType;
+
+    fn requires_body_parts(&self) -> Vec<screeps::Part> {
+        vec![Part::Work, Part::Carry]
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -107,4 +120,6 @@ pub enum TaskType {
     Repair,
     Transfer,
     Upgrade,
+    Attack,
+    Move,
 }
