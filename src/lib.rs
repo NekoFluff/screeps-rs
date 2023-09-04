@@ -47,7 +47,7 @@ pub fn game_loop() {
         let spawn_goals: SpawnGoals = vec![
             SpawnGoal {
                 name: "worker".to_string(),
-                body: vec![Part::Work, Part::Carry, Part::Move],
+                body: vec![Part::Work, Part::Carry, Part::Move, Part::Move],
                 additive_body: vec![Part::Work, Part::Carry, Part::Move],
                 max_additions: 4,
                 source_modifier: 1,
