@@ -33,7 +33,7 @@ pub use travel::TravelTask;
 pub use upgrade::UpgradeTask;
 use wasm_bindgen::JsValue;
 
-use crate::utils::get_creep_type;
+use crate::utils::{self, get_creep_type};
 
 pub struct TaskManager {
     pub tasks: HashMap<ObjectId<Creep>, Box<dyn Task>>,
@@ -311,7 +311,7 @@ impl TaskManager {
                         continue;
                     }
                 } else if let StructureObject::StructureRoad(road) = structure {
-                    if road.hits() > 100 {
+                    if road.hits() > road.hits_max() / 2 {
                         continue;
                     }
                 } else if let StructureObject::StructureRampart(road) = structure {
@@ -361,21 +361,7 @@ fn get_task_for_creep(creep: &Creep, task_list: &mut Vec<Box<dyn Task>>) -> Opti
         }
 
         // Go back to an owned room if we can't harvest in the current room
-        let rooms = screeps::game::rooms().values();
-        let my_owned_rooms = rooms
-            .filter(|room| {
-                room.controller()
-                    .map(|c| {
-                        c.owner()
-                            .is_some_and(|o| o.username() == creep.owner().username())
-                    })
-                    .unwrap_or(false)
-            })
-            .collect::<Vec<_>>();
-
-        if let Some(room) = my_owned_rooms.first() {
-            return Some(Box::new(TravelTask::new(room.controller().unwrap().id())));
-        }
+        return get_travel_home_task(&creep.owner().username());
     }
 
     // (index, task)
@@ -435,16 +421,39 @@ fn get_default_task_for_creep(creep: &Creep) -> Option<Box<dyn Task>> {
     if creep_parts.contains(&Part::Attack) {
         let controller = creep.room().unwrap().controller().unwrap();
         if !creep.pos().in_range_to(controller.pos(), 3) {
-            Some(Box::new(TravelTask::new(controller.id())))
-        } else {
-            None
+            return Some(Box::new(TravelTask::new(controller.id())));
         }
     } else if creep_parts.contains(&Part::Claim) {
         return None;
-    } else {
+    } else if creep_parts.contains(&Part::Work)
+        && creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0
+    {
         return Some(Box::new(UpgradeTask::new(
             creep.room().unwrap().controller().unwrap().id(),
         )));
+    }
+
+    if !utils::is_mine(&creep.room().unwrap()) {
+        return get_travel_home_task(&creep.owner().username());
+    }
+
+    None
+}
+
+fn get_travel_home_task(owner_username: &str) -> Option<Box<dyn Task>> {
+    let rooms = screeps::game::rooms().values();
+    let my_owned_rooms = rooms
+        .filter(|room| {
+            room.controller()
+                .map(|c| c.owner().is_some_and(|o| o.username() == owner_username))
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+
+    if let Some(room) = my_owned_rooms.first() {
+        Some(Box::new(TravelTask::new(room.controller().unwrap().id())))
+    } else {
+        None
     }
 }
 
