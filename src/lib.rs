@@ -20,6 +20,7 @@ use wasm_bindgen::prelude::*;
 mod logging;
 mod spawn;
 mod tasks;
+mod utils;
 
 // add wasm_bindgen to any function you would like to expose for call from js
 #[wasm_bindgen]
@@ -36,16 +37,13 @@ thread_local! {
 // to use a reserved name as a function name, use `js_name`:
 #[wasm_bindgen(js_name = loop)]
 pub fn game_loop() {
-    let target_creep_count = 5;
-
     debug!(
         "loop starting! CPU: {}. Peak Malloc: {}. Total Memory: {}",
         game::cpu::get_used(),
         game::cpu::get_heap_statistics().peak_malloced_memory(),
         game::cpu::get_heap_statistics().total_heap_size()
     );
-    // mutably borrow the task_manager refcell, which is holding our creep target locks
-    // in the wasm heap
+
     TASK_MANAGER.with(|task_manager_refcell| {
         let mut task_manager = task_manager_refcell.borrow_mut();
         debug!("running creeps");
@@ -61,11 +59,7 @@ pub fn game_loop() {
 
         let mut tasks = Vec::new();
         if let Some(creep) = idle_creeps.get(0) {
-            tasks = get_potential_creep_tasks(
-                &creep.room().unwrap(),
-                idle_creep_count,
-                target_creep_count,
-            );
+            tasks = get_potential_creep_tasks(&creep.room().unwrap(), idle_creep_count);
         }
 
         for creep in idle_creeps {
@@ -138,11 +132,7 @@ fn execute_towers(room: &Room) {
     }
 }
 
-fn get_potential_creep_tasks(
-    room: &Room,
-    max_tasks: usize,
-    target_creep_count: usize,
-) -> Vec<Box<dyn Task>> {
+fn get_potential_creep_tasks(room: &Room, max_tasks: usize) -> Vec<Box<dyn Task>> {
     let mut creep_targets: Vec<Box<dyn Task>> = Vec::new();
 
     let structures = room.find(find::STRUCTURES, None);
@@ -222,12 +212,8 @@ fn get_potential_creep_tasks(
         if spawn.is_active() && spawn.store().get_free_capacity(Some(ResourceType::Energy)) > 0 {
             if let Some(id) = spawn.try_id() {
                 creep_targets.push(Box::new(TransferTask::new(id)));
-
-                if game::creeps().values().count() < target_creep_count {
-                    for _ in 0..max_tasks {
-                        creep_targets.push(Box::new(TransferTask::new(id)));
-                    }
-                }
+                creep_targets.push(Box::new(TransferTask::new(id)));
+                creep_targets.push(Box::new(TransferTask::new(id)));
 
                 if creep_targets.len() >= max_tasks {
                     return creep_targets;

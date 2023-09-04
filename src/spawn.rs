@@ -1,5 +1,6 @@
+use crate::utils::get_creep_type;
 use log::*;
-use screeps::{game, Part, SharedCreepProperties};
+use screeps::{game, Part};
 use std::collections::HashMap;
 
 pub struct SpawnGoal {
@@ -25,14 +26,7 @@ impl SpawnManager {
 
         let creeps = game::creeps();
         let creep_counts = creeps.values().fold(HashMap::new(), |mut acc, creep| {
-            *acc.entry(
-                creep
-                    .name()
-                    .chars()
-                    .take_while(|&ch| ch != '-')
-                    .collect::<String>(),
-            )
-            .or_insert(0) += 1;
+            *acc.entry(get_creep_type(&creep)).or_insert(0) += 1;
             acc
         });
 
