@@ -47,6 +47,19 @@ impl TaskManager {
         }
     }
 
+    pub fn clean_up_tasks(&mut self) {
+        let mut tasks_to_remove = Vec::new();
+        for (creep_id, _task) in self.tasks.iter() {
+            if game::get_object_by_id_typed(creep_id).is_none() {
+                tasks_to_remove.push(*creep_id);
+            }
+        }
+
+        for creep_id in tasks_to_remove {
+            self.tasks.remove(&creep_id);
+        }
+    }
+
     fn recalculate_working_creeps(&mut self) {
         let tasks = self.tasks.iter();
         self.working_creeps_by_room = tasks.fold(HashMap::new(), |mut acc, (creep_id, task)| {

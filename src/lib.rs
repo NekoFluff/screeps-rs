@@ -36,7 +36,7 @@ pub fn game_loop() {
 
     TASK_MANAGER.with(|task_manager_refcell| {
         let mut task_manager = task_manager_refcell.borrow_mut();
-
+        task_manager.clean_up_tasks();
         let flag_tasks = task_manager.assign_tasks();
         task_manager.execute_tasks();
 
