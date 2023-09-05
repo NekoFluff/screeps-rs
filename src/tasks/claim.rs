@@ -37,11 +37,9 @@ impl super::Task for ClaimTask {
 
         if current_room.name() == room_pos.room_name() {
             let controller = current_room.controller().unwrap();
-            if let Some(owner) = controller.owner() {
-                if owner.username() == creep.owner().username() {
-                    complete(creep.try_id().unwrap());
-                    return;
-                }
+            if controller.my() {
+                complete(creep.try_id().unwrap());
+                return;
             }
 
             if creep.pos().is_near_to(controller.pos()) {

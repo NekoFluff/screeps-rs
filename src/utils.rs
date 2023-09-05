@@ -10,11 +10,6 @@ pub fn get_creep_type(creep: &Creep) -> String {
 
 pub fn is_mine(room: &Room) -> bool {
     room.controller()
-        .map(|controller| {
-            controller
-                .owner()
-                .map(|o| o.username() == "CrazyFluff")
-                .unwrap_or(false)
-        })
+        .map(|controller| controller.my())
         .unwrap_or(false)
 }

@@ -233,38 +233,36 @@ impl TaskManager {
         {
             // Gather energy
             if let Some(controller) = room.controller() {
-                if let Some(owner) = controller.owner() {
-                    if owner.username() == creep.owner().username() {
-                        let mut sources = room.find(find::SOURCES_ACTIVE, None);
-                        sources.sort_by_key(|s| {
-                            if let Some(room_data) =
-                                self.working_creeps_by_room_and_pos.get(&room.name())
-                            {
-                                let cost = *room_data.get(&s.pos()).unwrap_or(&0) * 10
-                                    + creep.pos().get_range_to(s.pos());
-                                info!(
-                                    "{}: {} + {} = {}",
-                                    s.pos(),
-                                    *room_data.get(&s.pos()).unwrap_or(&0) * 5,
-                                    creep.pos().get_range_to(s.pos()),
-                                    cost
-                                );
-                                return cost;
-                            }
-                            0
-                        });
-
-                        if let Some(source) = sources.first() {
-                            return Some(Box::new(HarvestTask::new(source.id())));
-                        } else {
-                            // There are no sources to gather from and the creep has no energy
-                            // so do nothing
-                            return None;
+                if controller.my() {
+                    let mut sources = room.find(find::SOURCES_ACTIVE, None);
+                    sources.sort_by_key(|s| {
+                        if let Some(room_data) =
+                            self.working_creeps_by_room_and_pos.get(&room.name())
+                        {
+                            let cost = *room_data.get(&s.pos()).unwrap_or(&0) * 10
+                                + creep.pos().get_range_to(s.pos());
+                            info!(
+                                "{}: {} + {} = {}",
+                                s.pos(),
+                                *room_data.get(&s.pos()).unwrap_or(&0) * 5,
+                                creep.pos().get_range_to(s.pos()),
+                                cost
+                            );
+                            return cost;
                         }
+                        0
+                    });
+
+                    if let Some(source) = sources.first() {
+                        return Some(Box::new(HarvestTask::new(source.id())));
                     } else {
-                        // Go back to an owned room if we can't harvest in the current room
-                        return get_travel_home_task(creep);
+                        // There are no sources to gather from and the creep has no energy
+                        // so do nothing
+                        return None;
                     }
+                } else {
+                    // Go back to an owned room if we can't harvest in the current room
+                    return get_travel_home_task(creep);
                 }
             }
         }
@@ -375,15 +373,13 @@ impl TaskManager {
         }
 
         // controller: if the downgrade time is less than 10000 ticks, upgrade
-        if let Some(owner) = controller.owner() {
-            if owner.username() == "CrazyFluff" && controller.is_active() {
-                if controller.ticks_to_downgrade() < 9000 {
-                    tasks.push(Box::new(UpgradeTask::new(controller.id())));
-                }
+        if controller.my() && controller.is_active() {
+            if controller.ticks_to_downgrade() < 9000 {
+                tasks.push(Box::new(UpgradeTask::new(controller.id())));
+            }
 
-                if controller.level() < 2 {
-                    tasks.push(Box::new(UpgradeTask::new(controller.id())));
-                }
+            if controller.level() < 2 {
+                tasks.push(Box::new(UpgradeTask::new(controller.id())));
             }
         }
 
@@ -414,7 +410,7 @@ impl TaskManager {
                         .store()
                         .get_free_capacity(Some(ResourceType::Energy))
                         > 0
-                    && extension.owner().unwrap().username() == "CrazyFluff"
+                    && extension.my()
                 {
                     if let Some(id) = extension.try_id() {
                         tasks.push(Box::new(TransferTask::new(id)));
@@ -540,14 +536,7 @@ fn get_default_task_for_creep(creep: &Creep) -> Option<Box<dyn Task>> {
 fn get_travel_home_task(creep: &Creep) -> Option<Box<dyn Task>> {
     let rooms = screeps::game::rooms().values();
     let mut my_owned_rooms = rooms
-        .filter(|room| {
-            room.controller()
-                .map(|c| {
-                    c.owner()
-                        .is_some_and(|o| o.username() == creep.owner().username())
-                })
-                .unwrap_or(false)
-        })
+        .filter(|room| room.controller().map(|c| c.my()).unwrap_or(false))
         .collect::<Vec<_>>();
 
     // Sort rooms by distance to creep (closest first)
