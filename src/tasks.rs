@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 use log::*;
 use screeps::{
     find, game, Creep, HasHits, HasPosition, HasTypedId, MaybeHasTypedId, ObjectId,
-    OwnedStructureProperties, Part, ResourceType, Room, RoomName, RoomPosition,
+    OwnedStructureProperties, Part, Position, ResourceType, Room, RoomName, RoomPosition,
     SharedCreepProperties, StructureObject, StructureProperties, StructureType,
 };
 
@@ -35,6 +35,7 @@ use crate::utils::{self, get_creep_type};
 pub struct TaskManager {
     pub tasks: HashMap<ObjectId<Creep>, Box<dyn Task>>,
     working_creeps_by_room: HashMap<RoomName, HashMap<String, u32>>,
+    working_creeps_by_room_and_pos: HashMap<RoomName, HashMap<Position, u32>>,
 }
 
 impl TaskManager {
@@ -42,6 +43,7 @@ impl TaskManager {
         TaskManager {
             tasks: HashMap::new(),
             working_creeps_by_room: HashMap::new(),
+            working_creeps_by_room_and_pos: HashMap::new(),
         }
     }
 
@@ -65,6 +67,31 @@ impl TaskManager {
             *creep_count += 1;
             acc
         });
+    }
+
+    fn recalculate_working_creeps_by_room_and_pos(&mut self) {
+        let tasks = self.tasks.iter();
+        self.working_creeps_by_room_and_pos =
+            tasks.fold(HashMap::new(), |mut acc, (creep_id, task)| {
+                let creep = game::get_object_by_id_typed(creep_id);
+                if creep.is_none() {
+                    return acc;
+                }
+
+                let creep: Creep = creep.unwrap();
+                let room_name = task
+                    .get_target_pos()
+                    .map(|p| p.room_name())
+                    .unwrap_or(creep.room().unwrap().name());
+
+                if let Some(target_pos) = task.get_target_pos() {
+                    let count: &mut HashMap<Position, u32> = acc.entry(room_name).or_default();
+                    let creep_count = count.entry(target_pos).or_insert(0);
+                    *creep_count += 1;
+                }
+
+                acc
+            });
     }
 
     pub fn add_task(&mut self, creep: &Creep, task: Box<dyn Task>) {
@@ -120,6 +147,15 @@ impl TaskManager {
         for (creep_id, task) in switch_tasks.borrow_mut().drain() {
             info!("{}'s task was switched to {:?}", creep_id, task);
             if let Some(creep) = game::get_object_by_id_typed(&creep_id) {
+                if let Some(target_pos) = task.get_target_pos() {
+                    if let Some(room1) = self
+                        .working_creeps_by_room_and_pos
+                        .get_mut(&creep.room().unwrap().name())
+                    {
+                        *room1.entry(target_pos).or_insert(0) += 1;
+                    }
+                }
+
                 self.add_task(&creep, task);
             }
         }
@@ -127,6 +163,7 @@ impl TaskManager {
 
     pub fn assign_tasks(&mut self) -> Vec<Box<dyn Task>> {
         self.recalculate_working_creeps();
+        self.recalculate_working_creeps_by_room_and_pos();
         let idle_creeps = self.get_idle_creeps();
         let mut flag_tasks = self.get_flag_tasks();
         let mut room_tasks_map = HashMap::new();
@@ -141,13 +178,13 @@ impl TaskManager {
             }
             let current_room = current_room.unwrap();
 
-            if let Some(task) = get_task_for_creep(&creep, &mut flag_tasks) {
+            if let Some(task) = self.get_task_for_creep(&creep, &mut flag_tasks) {
                 self.add_task(&creep, task);
                 continue;
             }
 
             if let Some(room_tasks) = room_tasks_map.get_mut(&current_room.name()) {
-                if let Some(task) = get_task_for_creep(&creep, room_tasks) {
+                if let Some(task) = self.get_task_for_creep(&creep, room_tasks) {
                     self.add_task(&creep, task);
                     continue;
                 }
@@ -168,7 +205,7 @@ impl TaskManager {
                 //     }
                 // }
 
-                if let Some(task) = get_task_for_creep(&creep, room_tasks) {
+                if let Some(task) = self.get_task_for_creep(&creep, room_tasks) {
                     self.add_task(&creep, task);
                     continue;
                 }
@@ -180,6 +217,106 @@ impl TaskManager {
         }
 
         flag_tasks
+    }
+
+    /// Returns the most appropriate task for the creep based on its body parts (if one exists)
+    fn get_task_for_creep(
+        &self,
+        creep: &Creep,
+        task_list: &mut Vec<Box<dyn Task>>,
+    ) -> Option<Box<dyn Task>> {
+        let creep_parts = creep.body().iter().map(|p| p.part()).collect::<Vec<Part>>();
+        let room = creep.room().unwrap();
+
+        if creep_parts.contains(&Part::Work)
+            && creep.store().get_used_capacity(Some(ResourceType::Energy)) == 0
+        {
+            // Gather energy
+            if let Some(controller) = room.controller() {
+                if let Some(owner) = controller.owner() {
+                    if owner.username() == creep.owner().username() {
+                        let mut sources = room.find(find::SOURCES_ACTIVE, None);
+                        sources.sort_by_key(|s| {
+                            if let Some(room_data) =
+                                self.working_creeps_by_room_and_pos.get(&room.name())
+                            {
+                                let cost = *room_data.get(&s.pos()).unwrap_or(&0) * 10
+                                    + creep.pos().get_range_to(s.pos());
+                                info!(
+                                    "{}: {} + {} = {}",
+                                    s.pos(),
+                                    *room_data.get(&s.pos()).unwrap_or(&0) * 5,
+                                    creep.pos().get_range_to(s.pos()),
+                                    cost
+                                );
+                                return cost;
+                            }
+                            0
+                        });
+
+                        if let Some(source) = sources.first() {
+                            return Some(Box::new(HarvestTask::new(source.id())));
+                        } else {
+                            // There are no sources to gather from and the creep has no energy
+                            // so do nothing
+                            return None;
+                        }
+                    } else {
+                        // Go back to an owned room if we can't harvest in the current room
+                        return get_travel_home_task(creep);
+                    }
+                }
+            }
+        }
+
+        // (index, task)
+        let mut similar_tasks: Vec<(usize, &Box<dyn Task>)> = vec![];
+        for (index, task) in task_list.iter().enumerate() {
+            if similar_tasks.is_empty()
+                && task
+                    .requires_body_parts()
+                    .iter()
+                    .all(|p| creep_parts.contains(p))
+            {
+                similar_tasks.push((index, task));
+                continue;
+            } else if !similar_tasks.is_empty() {
+                let first_task = similar_tasks.get(0).unwrap().1;
+                if task.get_type() == first_task.get_type() {
+                    similar_tasks.push((index, task));
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // Default task
+        if similar_tasks.is_empty() {
+            return None;
+        }
+
+        if similar_tasks.len() == 1 {
+            return Some(task_list.remove(similar_tasks.get(0).unwrap().0));
+        }
+
+        // (index, distance to target)
+        let mut tasks_by_distance = similar_tasks
+            .iter()
+            .map(|t| {
+                if let Some(target) = t.1.get_target_pos() {
+                    let distance = creep.pos().get_range_to(target);
+                    return (t.0, distance);
+                }
+                (t.0, u32::MAX)
+            })
+            .collect::<Vec<(usize, u32)>>();
+
+        tasks_by_distance.sort_by(|a, b| a.1.cmp(&b.1));
+        // info!("sorted tasks: {:?}", tasks_by_distance);
+
+        let shortest_distance_idx = tasks_by_distance.first().unwrap().0;
+
+        Some(task_list.remove(shortest_distance_idx))
     }
 
     fn get_flag_tasks(&self) -> Vec<Box<dyn Task>> {
@@ -321,16 +458,16 @@ impl TaskManager {
         for structure in structures.iter() {
             let s = structure.as_structure();
             if s.hits() < s.hits_max() / 2 {
-                if let StructureObject::StructureWall(wall) = structure {
-                    if wall.hits() > 25000 {
+                if let StructureObject::StructureWall(s) = structure {
+                    if s.hits() > 25000 {
                         continue;
                     }
-                } else if let StructureObject::StructureRoad(road) = structure {
-                    if road.hits() > road.hits_max() / 2 {
+                } else if let StructureObject::StructureRoad(s) = structure {
+                    if s.hits() > s.hits_max() / 2 {
                         continue;
                     }
-                } else if let StructureObject::StructureRampart(road) = structure {
-                    if road.hits() > 100000 {
+                } else if let StructureObject::StructureRampart(s) = structure {
+                    if s.hits() > 100000 {
                         continue;
                     }
                 }
@@ -365,86 +502,6 @@ impl TaskManager {
 
         idle_creeps
     }
-}
-
-/// Returns the most appropriate task for the creep based on its body parts (if one exists)
-fn get_task_for_creep(creep: &Creep, task_list: &mut Vec<Box<dyn Task>>) -> Option<Box<dyn Task>> {
-    let creep_parts = creep.body().iter().map(|p| p.part()).collect::<Vec<Part>>();
-    let room = creep.room().unwrap();
-
-    if creep_parts.contains(&Part::Work)
-        && creep.store().get_used_capacity(Some(ResourceType::Energy)) == 0
-    {
-        // Gather energy
-        if let Some(controller) = room.controller() {
-            if let Some(owner) = controller.owner() {
-                if owner.username() == creep.owner().username() {
-                    let mut sources = room.find(find::SOURCES_ACTIVE, None);
-                    sources.sort_by_key(|a| 0 - a.energy());
-
-                    if let Some(source) = sources.first() {
-                        return Some(Box::new(HarvestTask::new(source.id())));
-                    } else {
-                        // There are no sources to gather from and the creep has no energy
-                        // so do nothing
-                        return None;
-                    }
-                } else {
-                    // Go back to an owned room if we can't harvest in the current room
-                    return get_travel_home_task(creep);
-                }
-            }
-        }
-    }
-
-    // (index, task)
-    let mut similar_tasks: Vec<(usize, &Box<dyn Task>)> = vec![];
-    for (index, task) in task_list.iter().enumerate() {
-        if similar_tasks.is_empty()
-            && task
-                .requires_body_parts()
-                .iter()
-                .all(|p| creep_parts.contains(p))
-        {
-            similar_tasks.push((index, task));
-            continue;
-        } else if !similar_tasks.is_empty() {
-            let first_task = similar_tasks.get(0).unwrap().1;
-            if task.get_type() == first_task.get_type() {
-                similar_tasks.push((index, task));
-            } else {
-                break;
-            }
-        }
-    }
-
-    // Default task
-    if similar_tasks.is_empty() {
-        return None;
-    }
-
-    if similar_tasks.len() == 1 {
-        return Some(task_list.remove(similar_tasks.get(0).unwrap().0));
-    }
-
-    // (index, distance to target)
-    let mut tasks_by_distance = similar_tasks
-        .iter()
-        .map(|t| {
-            if let Some(target) = t.1.get_target_pos() {
-                let distance = creep.pos().get_range_to(target);
-                return (t.0, distance);
-            }
-            (t.0, u32::MAX)
-        })
-        .collect::<Vec<(usize, u32)>>();
-
-    tasks_by_distance.sort_by(|a, b| a.1.cmp(&b.1));
-    // info!("sorted tasks: {:?}", tasks_by_distance);
-
-    let shortest_distance_idx = tasks_by_distance.first().unwrap().0;
-
-    Some(task_list.remove(shortest_distance_idx))
 }
 
 fn get_default_task_for_creep(creep: &Creep) -> Option<Box<dyn Task>> {

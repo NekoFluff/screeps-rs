@@ -49,9 +49,9 @@ pub fn game_loop() {
                 name: "worker".to_string(),
                 body: vec![Part::Work, Part::Carry, Part::Move, Part::Move],
                 additive_body: vec![Part::Work, Part::Carry, Part::Move],
-                max_additions: 4,
+                max_additions: 5,
                 source_modifier: 1,
-                count: 5,
+                count: 4,
                 is_global: false,
             },
             SpawnGoal {

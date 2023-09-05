@@ -41,22 +41,24 @@ impl super::Task for HarvestTask {
                     cancel(creep.try_id().unwrap());
                 });
             } else {
-                creep.move_to(&source).unwrap_or_else(|_e| {
-                    // info!("couldn't move to harvest: {:?}", _e);
+                let _ = creep.move_to(&source);
 
-                    let mut sources = room.find(find::SOURCES_ACTIVE, None);
-                    sources.sort_by_key(|a| 0 - a.energy());
+                // creep.move_to(&source).unwrap_or_else(|_e| {
+                //     // info!("couldn't move to harvest: {:?}", _e);
 
-                    for new_source in sources {
-                        if source.try_id().unwrap() != new_source.try_id().unwrap() {
-                            switch(
-                                creep.try_id().unwrap(),
-                                Box::new(HarvestTask::new(new_source.try_id().unwrap())),
-                            );
-                            return;
-                        }
-                    }
-                });
+                //     let mut sources = room.find(find::SOURCES_ACTIVE, None);
+                //     sources.sort_by_key(|a| 0 - a.energy());
+
+                //     for new_source in sources {
+                //         if source.try_id().unwrap() != new_source.try_id().unwrap() {
+                //             switch(
+                //                 creep.try_id().unwrap(),
+                //                 Box::new(HarvestTask::new(new_source.try_id().unwrap())),
+                //             );
+                //             return;
+                //         }
+                //     }
+                // });
             }
         } else {
             cancel(creep.try_id().unwrap());
