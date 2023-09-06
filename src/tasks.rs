@@ -46,9 +46,22 @@ pub struct TaskManager {
 
 impl TaskManager {
     pub fn new() -> TaskManager {
+        let creeps = game::creeps();
+        let mut working_creeps_by_room = HashMap::new();
+
+        for creep in creeps.values() {
+            let creep_type = get_creep_type(&creep);
+            let room_name = creep.room().unwrap().name();
+
+            let count: &mut HashMap<String, u32> =
+                working_creeps_by_room.entry(room_name).or_default();
+            let creep_count = count.entry(creep_type).or_insert(0);
+            *creep_count += 1;
+        }
+
         TaskManager {
             tasks: HashMap::new(),
-            working_creeps_by_room: HashMap::new(),
+            working_creeps_by_room,
             working_creeps_by_room_and_pos: HashMap::new(),
             room_links: HashMap::new(),
         }
