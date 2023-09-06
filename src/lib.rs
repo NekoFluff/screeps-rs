@@ -111,7 +111,11 @@ fn execute_towers(room: &Room) {
     let mut damaged = structures
         .iter()
         .map(|s| s.as_structure())
-        .filter(|s| s.hits() < s.hits_max() && s.hits() < 1000000)
+        .filter(|s| {
+            let x = (s.hits() as f32 / s.hits_max() as f32) < 0.8;
+            let y = s.hits() < 1000000;
+            x && y
+        })
         .collect::<Vec<_>>();
 
     damaged.sort_by_key(|a| a.hits());
