@@ -30,9 +30,14 @@ impl super::Task for TravelDumbTask {
             return;
         }
 
-        creep.move_to(self.target).unwrap_or_else(|e| {
-            debug!("cant move to location: {:?}", e);
-            cancel(creep.try_id().unwrap());
+        creep.move_to(self.target).unwrap_or_else(|e| match e {
+            screeps::ErrorCode::Tired => {
+                // ignore
+            }
+            _ => {
+                info!("cant move to location: {:?}", e);
+                cancel(creep.try_id().unwrap());
+            }
         });
     }
 
