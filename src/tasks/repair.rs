@@ -21,7 +21,7 @@ impl super::Task for RepairTask {
     }
 
     fn execute(
-        &self,
+        &mut self,
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,

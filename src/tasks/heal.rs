@@ -19,7 +19,7 @@ impl super::Task for HealTask {
     }
 
     fn execute(
-        &self,
+        &mut self,
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,

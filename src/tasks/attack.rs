@@ -19,7 +19,7 @@ impl super::Task for AttackTask {
     }
 
     fn execute(
-        &self,
+        &mut self,
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
@@ -54,6 +54,10 @@ impl super::Task for AttackTask {
 
     fn get_target_pos(&self) -> Option<screeps::Position> {
         self.target.resolve().map(|target| target.pos())
+    }
+
+    fn requires_energy(&self) -> bool {
+        false
     }
 }
 

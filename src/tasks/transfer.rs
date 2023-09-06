@@ -58,7 +58,7 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
     }
 
     fn execute(
-        &self,
+        &mut self,
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,

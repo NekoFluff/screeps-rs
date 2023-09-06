@@ -1,12 +1,8 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
 
 use log::*;
 use screeps::{constants::Part, enums::StructureObject, find, game};
-use screeps::{
-    HasPosition, MaybeHasTypedId, ObjectId, ResourceType, Room, RoomObjectProperties, Structure,
-    StructureProperties, StructureType,
-};
+use screeps::{HasPosition, Room, StructureProperties, StructureType};
 use spawn::{SpawnGoal, SpawnGoals, SpawnManager};
 use tasks::TaskManager;
 use wasm_bindgen::prelude::*;
@@ -39,8 +35,15 @@ pub fn game_loop() {
     );
 
     TASK_MANAGER.with(|task_manager_refcell| {
+        let rooms = game::rooms().values();
+
+        for room in rooms {
+            execute_towers(&room);
+        }
+
         let mut task_manager = task_manager_refcell.borrow_mut();
         task_manager.clean_up_tasks();
+        task_manager.classify_links();
         let flag_tasks = task_manager.assign_tasks();
         task_manager.execute_tasks();
 
@@ -65,7 +68,7 @@ pub fn game_loop() {
                 max_additions: 0,
                 count: 2,
                 source_modifier: 0,
-                is_global: false,
+                is_global: true, // TODO: Fix defend flag mechanic
             },
             SpawnGoal {
                 name: "claimer".to_string(),
@@ -80,13 +83,6 @@ pub fn game_loop() {
 
         SpawnManager::new(spawn_goals).spawn_creeps();
     });
-
-    let rooms = game::rooms().values();
-
-    for room in rooms {
-        execute_towers(&room);
-        execute_links(&room);
-    }
 
     info!(
         "Done! cpu: {} Peak Malloc: {}. Total Memory: {}",
@@ -110,108 +106,6 @@ impl LinkTypeMap {
             storage_links: Vec::new(),
             controller_links: Vec::new(),
             unknown_links: Vec::new(),
-        }
-    }
-}
-
-fn classify_links(room: &Room) -> LinkTypeMap {
-    let mut map: LinkTypeMap = LinkTypeMap::new();
-
-    let my_structures = room.find(find::MY_STRUCTURES, None);
-
-    let links = my_structures
-        .iter()
-        .filter(|s| s.structure_type() == StructureType::Link);
-
-    let sources = room.find(find::SOURCES, None);
-
-    let storages = my_structures
-        .iter()
-        .filter(|s| s.structure_type() == StructureType::Storage)
-        .collect::<Vec<_>>();
-
-    let controller = room.controller().unwrap();
-
-    'link_loop: for link in links {
-        for source in sources.iter() {
-            if link.pos().in_range_to(source.pos(), 2) {
-                map.source_links.push(link.clone());
-                continue 'link_loop;
-            }
-        }
-
-        if link.pos().in_range_to(controller.pos(), 2) {
-            map.controller_links.push(link.clone());
-            continue;
-        }
-
-        for storage in storages.iter() {
-            if link.pos().in_range_to(storage.pos(), 2) {
-                map.storage_links.push(link.clone());
-                continue 'link_loop;
-            }
-        }
-
-        map.unknown_links.push(link.clone());
-    }
-
-    map
-}
-
-fn execute_links(room: &Room) {
-    let link_map = classify_links(room);
-    // info!(
-    //     "links: source: {}, storage: {}, controller: {}, unknown: {}",
-    //     link_map.source_links.len(),
-    //     link_map.storage_links.len(),
-    //     link_map.controller_links.len(),
-    //     link_map.unknown_links.len()
-    // );
-    'source_loop: for link in link_map.source_links {
-        if let StructureObject::StructureLink(source_link) = link {
-            if source_link
-                .store()
-                .get_free_capacity(Some(ResourceType::Energy))
-                == 0
-            {
-                for storage_link in link_map.storage_links.iter() {
-                    if let StructureObject::StructureLink(storage_link) = storage_link {
-                        if storage_link
-                            .store()
-                            .get_free_capacity(Some(ResourceType::Energy))
-                            > 0
-                        {
-                            info!("transferring energy from source to storage");
-                            source_link
-                                .transfer_energy(storage_link, None)
-                                .unwrap_or_else(|e| {
-                                    info!("link couldn't transfer energy to storage: {:?}", e);
-                                });
-                            continue 'source_loop;
-                        }
-                    }
-                }
-
-                for controller_link in link_map.controller_links.iter() {
-                    if let StructureObject::StructureLink(controller_link) = controller_link {
-                        if controller_link
-                            .store()
-                            .get_free_capacity(Some(ResourceType::Energy))
-                            > 0
-                        {
-                            info!("transferring energy from source to controller");
-                            source_link
-                                .transfer_energy(controller_link, None)
-                                .unwrap_or_else(|e| {
-                                    info!("link couldn't transfer energy to controller: {:?}", e);
-                                });
-                            continue 'source_loop;
-                        }
-                    }
-                }
-
-                info!("link idle, no storage or controller links available");
-            }
         }
     }
 }

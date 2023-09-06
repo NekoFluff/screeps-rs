@@ -3,7 +3,10 @@ use std::fmt::Debug;
 use log::*;
 use screeps::{
     Creep, HasPosition, MaybeHasTypedId, ObjectId, ResourceType, SharedCreepProperties, Source,
+    StructureObject,
 };
+
+use crate::utils;
 
 pub struct HarvestTask {
     target: ObjectId<Source>,
@@ -21,15 +24,30 @@ impl super::Task for HarvestTask {
     }
 
     fn execute(
-        &self,
+        &mut self,
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        _switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
+        switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
     ) {
-        // let room = creep.room().unwrap();
+        let room = creep.room().unwrap();
         if creep.store().get_free_capacity(Some(ResourceType::Energy)) == 0 {
-            complete(creep.try_id().unwrap());
+            let source_links = utils::get_source_links(&room);
+            // transfer to closest source link
+            if let Some(StructureObject::StructureLink(source_link)) = source_links
+                .iter()
+                .min_by_key(|link| creep.pos().get_range_to(link.pos()))
+            {
+                switch(
+                    creep.try_id().unwrap(),
+                    Box::new(super::transfer::TransferTask::new(
+                        source_link.try_id().unwrap(),
+                    )),
+                );
+            } else {
+                complete(creep.try_id().unwrap());
+            }
+
             return;
         }
 
@@ -66,6 +84,10 @@ impl super::Task for HarvestTask {
 
     fn get_target_pos(&self) -> Option<screeps::Position> {
         self.target.resolve().map(|target| target.pos())
+    }
+
+    fn requires_energy(&self) -> bool {
+        false
     }
 }
 

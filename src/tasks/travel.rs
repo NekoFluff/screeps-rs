@@ -1,7 +1,9 @@
 use std::fmt::Debug;
 
 use log::*;
-use screeps::{Creep, HasPosition, MaybeHasTypedId, ObjectId, Resolvable, SharedCreepProperties};
+use screeps::{
+    Creep, HasPosition, MaybeHasTypedId, ObjectId, Part, Resolvable, SharedCreepProperties,
+};
 
 pub struct TravelTask<T: HasPosition + Resolvable> {
     target: ObjectId<T>,
@@ -19,7 +21,7 @@ impl<T: HasPosition + Resolvable> super::Task for TravelTask<T> {
     }
 
     fn execute(
-        &self,
+        &mut self,
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
@@ -50,6 +52,14 @@ impl<T: HasPosition + Resolvable> super::Task for TravelTask<T> {
 
     fn get_target_pos(&self) -> Option<screeps::Position> {
         self.target.resolve().map(|target| target.pos())
+    }
+
+    fn requires_body_parts(&self) -> Vec<screeps::Part> {
+        vec![Part::Move]
+    }
+
+    fn requires_energy(&self) -> bool {
+        false
     }
 }
 

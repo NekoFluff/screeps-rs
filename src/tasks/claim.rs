@@ -26,7 +26,7 @@ impl super::Task for ClaimTask {
     }
 
     fn execute(
-        &self,
+        &mut self,
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         _cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
@@ -60,6 +60,10 @@ impl super::Task for ClaimTask {
 
     fn get_target_pos(&self) -> Option<screeps::Position> {
         Some(self.target.pos())
+    }
+
+    fn requires_energy(&self) -> bool {
+        false
     }
 }
 
