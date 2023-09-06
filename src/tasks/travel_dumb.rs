@@ -1,9 +1,7 @@
 use std::fmt::Debug;
 
 use log::*;
-use screeps::{
-    Creep, HasPosition, MaybeHasTypedId, ObjectId, Position, Resolvable, SharedCreepProperties,
-};
+use screeps::{Creep, HasPosition, MaybeHasTypedId, ObjectId, Position, SharedCreepProperties};
 
 pub struct TravelDumbTask {
     target: Position,
@@ -39,7 +37,7 @@ impl super::Task for TravelDumbTask {
     }
 
     fn get_target_pos(&self) -> Option<screeps::Position> {
-        Some(self.target.clone())
+        Some(self.target)
     }
 }
 

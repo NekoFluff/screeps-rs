@@ -53,6 +53,13 @@ impl super::Task for RepairTask {
     fn get_target_pos(&self) -> Option<screeps::Position> {
         self.target.resolve().map(|target| target.pos())
     }
+
+    fn get_priority(&self) -> u32 {
+        self.target
+            .resolve()
+            .map(|target| target.hits())
+            .unwrap_or(0)
+    }
 }
 
 impl Debug for RepairTask {

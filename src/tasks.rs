@@ -47,6 +47,7 @@ impl TaskManager {
         }
     }
 
+    /// Removes tasks for creeps that no longer exist
     pub fn clean_up_tasks(&mut self) {
         let mut tasks_to_remove = Vec::new();
         for (creep_id, _task) in self.tasks.iter() {
@@ -203,7 +204,7 @@ impl TaskManager {
                 }
             }
 
-            let creep_type = get_creep_type(&creep);
+            // let creep_type = get_creep_type(&creep);
             for (room_name, room_tasks) in room_tasks_map.iter_mut() {
                 if room_name == &current_room.name() {
                     continue;
@@ -311,21 +312,25 @@ impl TaskManager {
         }
 
         // (index, distance to target)
-        let mut tasks_by_distance = similar_tasks
+        let mut tasks_by_value = similar_tasks
             .iter()
             .map(|t| {
-                if let Some(target) = t.1.get_target_pos() {
-                    let distance = creep.pos().get_range_to(target);
-                    return (t.0, distance);
+                if t.1.get_type() == TaskType::Repair {
+                    (t.0, t.1.get_priority())
+                } else {
+                    if let Some(target) = t.1.get_target_pos() {
+                        let distance = creep.pos().get_range_to(target);
+                        return (t.0, distance);
+                    }
+                    (t.0, u32::MAX)
                 }
-                (t.0, u32::MAX)
             })
             .collect::<Vec<(usize, u32)>>();
 
-        tasks_by_distance.sort_by(|a, b| a.1.cmp(&b.1));
-        // info!("sorted tasks: {:?}", tasks_by_distance);
+        tasks_by_value.sort_by(|a, b| a.1.cmp(&b.1));
+        // info!("sorted tasks: {:?}", tasks_by_value);
 
-        let shortest_distance_idx = tasks_by_distance.first().unwrap().0;
+        let shortest_distance_idx = tasks_by_value.first().unwrap().0;
 
         Some(task_list.remove(shortest_distance_idx))
     }
@@ -468,6 +473,10 @@ impl TaskManager {
             let s = structure.as_structure();
             if s.hits() < s.hits_max() / 2 {
                 if let StructureObject::StructureWall(s) = structure {
+                    if controller.level() < 3 {
+                        continue;
+                    }
+
                     if s.hits() > 25000 {
                         continue;
                     }
@@ -581,12 +590,21 @@ pub trait Task: Debug {
         switch: SwitchCallback,
     );
 
+    /// Returns the position of the target of the task
     fn get_target_pos(&self) -> Option<screeps::Position> {
         None
     }
 
+    /// Returns the priority of the task. Higher priority tasks will be executed first.
+    /// 0 is the highest priority.
+    fn get_priority(&self) -> u32 {
+        0
+    }
+
+    /// Returns the type of the task
     fn get_type(&self) -> TaskType;
 
+    /// Returns the body parts required to perform the task
     fn requires_body_parts(&self) -> Vec<screeps::Part> {
         vec![Part::Work, Part::Carry]
     }
