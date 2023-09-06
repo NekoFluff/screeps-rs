@@ -92,19 +92,33 @@ pub fn game_loop() {
 }
 
 fn execute_towers(room: &Room) {
-    let structures = room.find(find::MY_STRUCTURES, None);
+    let structures = room.find(find::STRUCTURES, None);
+    let my_structures = room.find(find::MY_STRUCTURES, None);
 
-    let towers = structures
+    let towers = my_structures
         .iter()
         .filter(|s| s.structure_type() == StructureType::Tower);
 
-    // get the closest enemies to each tower
-    for tower in towers {
-        let mut enemies = room.find(find::HOSTILE_CREEPS, None);
+    // get injured creeps
+    let creeps = game::creeps().values().collect::<Vec<_>>();
+    let mut injured = creeps
+        .iter()
+        .filter(|c| c.hits() < c.hits_max())
+        .collect::<Vec<_>>();
+    injured.sort_by_key(|a| a.hits());
 
-        if enemies.is_empty() {
-            continue;
-        }
+    // get damaged structures (anything with less than 1M hit points)
+    let mut damaged = structures
+        .iter()
+        .map(|s| s.as_structure())
+        .filter(|s| s.hits() < s.hits_max() && s.hits() < 1000000)
+        .collect::<Vec<_>>();
+
+    damaged.sort_by_key(|a| a.hits());
+
+    for tower in towers {
+        // attack the closest enemy creep
+        let mut enemies = room.find(find::HOSTILE_CREEPS, None);
 
         enemies.sort_by(|a, b| {
             tower
@@ -113,10 +127,25 @@ fn execute_towers(room: &Room) {
                 .cmp(&tower.pos().get_range_to(b.pos()))
         });
 
-        let enemy = enemies.first().unwrap();
+        if let Some(enemy) = enemies.first() {
+            if let StructureObject::StructureTower(tower) = tower {
+                let _ = tower.attack(enemy);
+                continue;
+            }
+        }
 
-        if let StructureObject::StructureTower(tower) = tower {
-            let _ = tower.attack(enemy);
+        if let Some(creep) = injured.first() {
+            if let StructureObject::StructureTower(tower) = tower {
+                let _ = tower.heal(*creep);
+                continue;
+            }
+        }
+
+        if let Some(structure) = damaged.first() {
+            if let StructureObject::StructureTower(tower) = tower {
+                let _ = tower.repair(structure);
+                continue;
+            }
         }
     }
 }
