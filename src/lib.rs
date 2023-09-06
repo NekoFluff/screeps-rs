@@ -94,6 +94,7 @@ pub fn game_loop() {
 fn execute_towers(room: &Room) {
     let structures = room.find(find::STRUCTURES, None);
     let my_structures = room.find(find::MY_STRUCTURES, None);
+    let mut enemies = room.find(find::HOSTILE_CREEPS, None);
 
     let towers = my_structures
         .iter()
@@ -103,18 +104,19 @@ fn execute_towers(room: &Room) {
     let creeps = game::creeps().values().collect::<Vec<_>>();
     let mut injured = creeps
         .iter()
-        .filter(|c| c.hits() < c.hits_max())
+        .filter(|c| c.hits() < c.hits_max() && c.my())
         .collect::<Vec<_>>();
     injured.sort_by_key(|a| a.hits());
 
-    // get damaged structures (anything with less than 1M hit points)
+    // get damaged structures (anything with less than 100K hit points)
     let mut damaged = structures
         .iter()
         .map(|s| s.as_structure())
         .filter(|s| {
             let x = (s.hits() as f32 / s.hits_max() as f32) < 0.8;
-            let y = s.hits() < 1000000;
-            x && y
+            let y = s.hits() < 100000;
+            let z = s.structure_type() != StructureType::Wall;
+            x && y && z
         })
         .collect::<Vec<_>>();
 
@@ -122,8 +124,6 @@ fn execute_towers(room: &Room) {
 
     for tower in towers {
         // attack the closest enemy creep
-        let mut enemies = room.find(find::HOSTILE_CREEPS, None);
-
         enemies.sort_by(|a, b| {
             tower
                 .pos()
@@ -140,7 +140,9 @@ fn execute_towers(room: &Room) {
 
         if let Some(creep) = injured.first() {
             if let StructureObject::StructureTower(tower) = tower {
-                let _ = tower.heal(*creep);
+                tower
+                    .heal(*creep)
+                    .unwrap_or_else(|e| info!("couldn't heal: {:?}", e));
                 continue;
             }
         }
