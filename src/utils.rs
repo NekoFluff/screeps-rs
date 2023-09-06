@@ -39,3 +39,9 @@ pub fn get_source_links(room: &Room) -> Vec<StructureObject> {
 pub fn get_room_name(room_name_str: &str) -> RoomName {
     RoomName::new(&room_name_str).unwrap()
 }
+
+pub fn pause_script() {
+    super::PAUSE_SCRIPT.with(|p| {
+        *p.borrow_mut() = true;
+    });
+}

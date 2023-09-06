@@ -25,11 +25,17 @@ pub fn setup() {
 thread_local! {
     static TASK_MANAGER: RefCell<TaskManager> = RefCell::new(TaskManager::new());
     static SOURCE_DATA: RefCell<Vec<metadata::SourceInfo>> = RefCell::new(Vec::new());
+    static PAUSE_SCRIPT: RefCell<bool> = RefCell::new(false);
 }
 
 // to use a reserved name as a function name, use `js_name`:
 #[wasm_bindgen(js_name = loop)]
 pub fn game_loop() {
+    let pause = PAUSE_SCRIPT.with(|p| *p.borrow());
+    if pause {
+        return;
+    }
+
     debug!(
         "loop starting! CPU: {}. Peak Malloc: {}. Total Memory: {}",
         game::cpu::get_used(),
