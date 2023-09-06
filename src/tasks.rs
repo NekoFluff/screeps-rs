@@ -157,7 +157,7 @@ impl TaskManager {
                                         .transfer_energy(controller_link, None)
                                         .unwrap_or_else(|e| {
                                             info!(
-                                                "link couldn't transfer energy to controller: {:?}",
+                                                "creep couldn't transfer energy to controller: {:?}",
                                                 e
                                             );
                                         });
@@ -244,7 +244,12 @@ impl TaskManager {
 
     pub fn add_task(&mut self, creep: &Creep, task: Box<dyn Task>) {
         if let Some(creep_id) = creep.try_id() {
-            info!("{} was assigned to {:?}", creep.name(), task);
+            info!(
+                "{} was assigned to {:?} at {:?}",
+                creep.name(),
+                task,
+                task.get_target_pos()
+            );
             let _ = js_sys::Reflect::set(
                 &creep.memory(),
                 &JsValue::from_str("task"),
@@ -337,7 +342,7 @@ impl TaskManager {
             room_tasks_map.insert(room.name(), self.get_room_tasks(room));
         }
 
-        for creep in idle_creeps {
+        'creep_loop: for creep in idle_creeps {
             let current_room = creep.room();
             if current_room.is_none() {
                 continue;
@@ -366,6 +371,12 @@ impl TaskManager {
                     let creep_type = get_creep_type(&creep);
                     if let Some(creep_count) = working_creeps.get(&creep_type) {
                         if *creep_count >= 3 {
+                            // info!(
+                            //     "{} has {} {} creeps working in it already",
+                            //     room_name.to_string(),
+                            //     creep_count,
+                            //     creep_type
+                            // );
                             continue;
                         }
                     }
@@ -373,7 +384,7 @@ impl TaskManager {
 
                 if let Some(task) = self.get_task_for_creep(&creep, room_tasks) {
                     self.add_task(&creep, task);
-                    continue;
+                    continue 'creep_loop;
                 }
             }
 
@@ -401,11 +412,14 @@ impl TaskManager {
                     .requires_body_parts()
                     .iter()
                     .all(|p| creep_parts.contains(p))
-                && task.requires_energy()
-                    == (creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0)
             {
-                similar_tasks.push((index, task));
-                continue;
+                if task.requires_energy()
+                    && creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0
+                    || !task.requires_energy()
+                {
+                    similar_tasks.push((index, task));
+                    continue;
+                }
             } else if !similar_tasks.is_empty() {
                 let first_task = similar_tasks.get(0).unwrap().1;
                 if task.get_type() == first_task.get_type() {
@@ -585,9 +599,9 @@ impl TaskManager {
                     && controller_link.pos().in_range_to(controller.pos(), 2)
                 {
                     if let Some(id) = controller_link.try_id() {
-                        let upgrade_task = Box::new(UpgradeTask::new(controller.id()));
+                        // let upgrade_task = Box::new(UpgradeTask::new(controller.id()));
 
-                        tasks.push(Box::new(WithdrawTask::new(id, Some(upgrade_task))));
+                        tasks.push(Box::new(WithdrawTask::new(id, Some(controller.id()), None)));
                     }
                 }
             }
@@ -631,9 +645,13 @@ impl TaskManager {
                             if let StructureObject::StructureStorage(storage) = storage {
                                 let transfer_task = Box::new(TransferTask::new(storage.id()));
 
-                                tasks.push(Box::new(WithdrawTask::new(id, Some(transfer_task))));
+                                tasks.push(Box::new(WithdrawTask::new(
+                                    id,
+                                    None,
+                                    Some(transfer_task),
+                                )));
                             } else {
-                                tasks.push(Box::new(WithdrawTask::new(id, None)));
+                                tasks.push(Box::new(WithdrawTask::new(id, None, None)));
                             }
                         }
                     }
@@ -775,13 +793,13 @@ impl TaskManager {
                             {
                                 let cost = *room_data.get(&s.pos()).unwrap_or(&0) * 10
                                     + creep.pos().get_range_to(s.pos());
-                                info!(
-                                    "{}: {} + {} = {}",
-                                    s.pos(),
-                                    *room_data.get(&s.pos()).unwrap_or(&0) * 5,
-                                    creep.pos().get_range_to(s.pos()),
-                                    cost
-                                );
+                                // info!(
+                                //     "Source Travel Cost: {}: {} + {} = {}",
+                                //     s.pos(),
+                                //     *room_data.get(&s.pos()).unwrap_or(&0) * 5,
+                                //     creep.pos().get_range_to(s.pos()),
+                                //     cost
+                                // );
                                 return cost;
                             }
                             0

@@ -66,10 +66,11 @@ impl Debug for AttackTask {
         if let Some(target_creep) = self.target.resolve() {
             write!(
                 f,
-                "Attack {} at ({}, {}) [{}/{}]",
+                "Attack {} at ({}, {}) in room {} [{}/{}]",
                 target_creep.name(),
                 target_creep.pos().x().u8(),
                 target_creep.pos().y().u8(),
+                target_creep.pos().room_name(),
                 target_creep.hits(),
                 target_creep.hits_max()
             )

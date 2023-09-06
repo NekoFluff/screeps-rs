@@ -67,10 +67,11 @@ impl Debug for RepairTask {
         if let Some(structure) = self.target.resolve() {
             write!(
                 f,
-                "Repair {:?} at ({}, {}) [{}/{}]",
+                "Repair {:?} at ({}, {}) in room {} [{}/{}]",
                 structure.structure_type(),
                 structure.pos().x().u8(),
                 structure.pos().y().u8(),
+                structure.pos().room_name(),
                 structure.hits(),
                 structure.hits_max()
             )

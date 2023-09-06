@@ -69,6 +69,12 @@ impl super::Task for ClaimTask {
 
 impl Debug for ClaimTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Claim controller")
+        write!(
+            f,
+            "Claim controller at ({}, {}) in room {}",
+            self.target.x(),
+            self.target.y(),
+            self.target.room_name()
+        )
     }
 }

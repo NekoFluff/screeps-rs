@@ -1,6 +1,6 @@
 use screeps::{
-    Creep, HasPosition, OwnedStructureProperties, Room, SharedCreepProperties, StructureObject,
-    StructureProperties, StructureType,
+    Creep, HasPosition, OwnedStructureProperties, Room, RoomName, SharedCreepProperties,
+    StructureObject, StructureProperties, StructureType,
 };
 
 pub fn get_creep_type(creep: &Creep) -> String {
@@ -34,4 +34,8 @@ pub fn get_source_links(room: &Room) -> Vec<StructureObject> {
         })
         .cloned()
         .collect::<Vec<_>>()
+}
+
+pub fn get_room_name(room_name_str: &str) -> RoomName {
+    RoomName::new(&room_name_str).unwrap()
 }

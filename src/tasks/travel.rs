@@ -68,9 +68,10 @@ impl<T: HasPosition + Resolvable> Debug for TravelTask<T> {
         if let Some(target) = self.target.resolve() {
             write!(
                 f,
-                "Travel to ({}, {})",
+                "Travel to ({}, {})in room {}",
                 target.pos().x().u8(),
-                target.pos().y().u8()
+                target.pos().y().u8(),
+                target.pos().room_name()
             )
         } else {
             write!(f, "Travel to unknown target")

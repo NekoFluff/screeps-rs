@@ -60,9 +60,10 @@ impl Debug for TravelDumbTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Travel (dumb) to ({}, {})",
+            "Travel (dumb) to ({}, {}) in room {}",
             self.target.x().u8(),
-            self.target.y().u8()
+            self.target.y().u8(),
+            self.target.room_name()
         )
     }
 }

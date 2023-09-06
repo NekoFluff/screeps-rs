@@ -60,9 +60,10 @@ impl Debug for UpgradeTask {
         if let Some(controller) = self.target.resolve() {
             write!(
                 f,
-                "Upgrade controller at ({}, {}) [{}/{}]",
+                "Upgrade controller at ({}, {}) in room {} [{}/{}]",
                 controller.pos().x().u8(),
                 controller.pos().y().u8(),
+                controller.pos().room_name(),
                 controller.progress(),
                 controller.progress_total()
             )

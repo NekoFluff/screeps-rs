@@ -119,9 +119,10 @@ impl<T: Transferable + Resolvable + HasStore> Debug for TransferTask<T> {
         if let Some(structure) = self.target.resolve() {
             write!(
                 f,
-                "Transfer energy to ({}, {})",
+                "Transfer energy to ({}, {}) in room {}",
                 structure.pos().x().u8(),
                 structure.pos().y().u8(),
+                structure.pos().room_name(),
             )
         } else {
             write!(f, "Transfer ({:?})", self.target)

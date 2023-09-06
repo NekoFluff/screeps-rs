@@ -96,9 +96,10 @@ impl Debug for HarvestTask {
         if let Some(source) = self.target.resolve() {
             write!(
                 f,
-                "Harvest at ({}, {}) [{}/{}]",
+                "Harvest at ({}, {}) in room {} [{}/{}]",
                 source.pos().x().u8(),
                 source.pos().y().u8(),
+                source.pos().room_name(),
                 source.energy(),
                 source.energy_capacity()
             )
