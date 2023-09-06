@@ -1,13 +1,15 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 use log::*;
 use screeps::{constants::Part, enums::StructureObject, find, game};
-use screeps::{HasPosition, Room, StructureProperties, StructureType};
+use screeps::{HasPosition, Room, RoomName, StructureProperties, StructureType};
 use spawn::{SpawnGoal, SpawnGoals, SpawnManager};
 use tasks::TaskManager;
 use wasm_bindgen::prelude::*;
 
 mod logging;
+mod metadata;
 mod spawn;
 mod tasks;
 mod utils;
@@ -22,6 +24,7 @@ pub fn setup() {
 // keeping state in memory on game objects - but will be lost on global resets!
 thread_local! {
     static TASK_MANAGER: RefCell<TaskManager> = RefCell::new(TaskManager::new());
+    static SOURCE_DATA: RefCell<Vec<metadata::SourceInfo>> = RefCell::new(Vec::new());
 }
 
 // to use a reserved name as a function name, use `js_name`:
@@ -51,37 +54,64 @@ pub fn game_loop() {
             .iter()
             .any(|t| t.get_type() == tasks::TaskType::Claim);
 
-        let spawn_goals: SpawnGoals = vec![
-            SpawnGoal {
+        // Spawn creeps
+        let mut room_spawn_goals: HashMap<RoomName, SpawnGoals> = HashMap::new();
+        for room in game::rooms().values() {
+            let spawns = room.find(find::MY_SPAWNS, None);
+            let spawn = spawns.first();
+            if spawn.is_none() {
+                continue;
+            }
+
+            let room_name = room.name();
+            let spawn_goals = room_spawn_goals.entry(room_name).or_default();
+
+            let sources = room.find(find::SOURCES, None);
+            let source_infos = sources
+                .iter()
+                .map(metadata::SourceInfo::new)
+                .collect::<Vec<_>>();
+
+            spawn_goals.push(SpawnGoal {
                 name: "worker".to_string(),
                 body: vec![Part::Move, Part::Move, Part::Carry, Part::Work],
-                additive_body: vec![Part::Move, Part::Carry, Part::Work],
-                max_additions: 5,
-                source_modifier: 1,
-                count: 4,
+                body_upgrades: vec![Part::Move, Part::Carry, Part::Work],
+                max_body_upgrades: 5,
+                source_modifier: 0,
+                count: std::cmp::min(
+                    source_infos
+                        .iter()
+                        .map(|s| s.non_wall_terrain_count)
+                        .sum::<u32>()
+                        + 2,
+                    source_infos.len() as u32 * 4,
+                ),
                 is_global: false,
-            },
-            SpawnGoal {
+            });
+
+            spawn_goals.push(SpawnGoal {
                 name: "melee".to_string(),
                 body: vec![Part::Move, Part::Move, Part::Attack, Part::Attack],
-                additive_body: vec![],
-                max_additions: 0,
+                body_upgrades: vec![],
+                max_body_upgrades: 0,
                 count: 2,
                 source_modifier: 0,
                 is_global: true, // TODO: Fix defend flag mechanic
-            },
-            SpawnGoal {
+            });
+
+            spawn_goals.push(SpawnGoal {
                 name: "claimer".to_string(),
                 body: vec![Part::Move, Part::Claim],
-                additive_body: vec![],
-                max_additions: 0,
+                body_upgrades: vec![],
+                max_body_upgrades: 0,
                 source_modifier: 0,
                 count: if claim_task_exists { 1 } else { 0 },
                 is_global: true,
-            },
-        ];
+            });
 
-        SpawnManager::new(spawn_goals).spawn_creeps();
+            // info!("spawn goals for room {}: {:?}", room_name, spawn_goals);
+        }
+        SpawnManager::new(room_spawn_goals).spawn_creeps();
     });
 
     info!(

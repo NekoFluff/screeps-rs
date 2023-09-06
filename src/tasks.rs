@@ -370,7 +370,7 @@ impl TaskManager {
                 if let Some(working_creeps) = self.working_creeps_by_room.get(room_name) {
                     let creep_type = get_creep_type(&creep);
                     if let Some(creep_count) = working_creeps.get(&creep_type) {
-                        if *creep_count >= 3 {
+                        if *creep_count >= 2 {
                             // info!(
                             //     "{} has {} {} creeps working in it already",
                             //     room_name.to_string(),
@@ -787,17 +787,26 @@ impl TaskManager {
                 if let Some(controller) = room.controller() {
                     if controller.my() {
                         let mut sources = room.find(find::SOURCES_ACTIVE, None);
+
                         sources.sort_by_key(|s| {
                             if let Some(room_data) =
                                 self.working_creeps_by_room_and_pos.get(&room.name())
                             {
-                                let cost = *room_data.get(&s.pos()).unwrap_or(&0) * 10
+                                let source_info = super::metadata::SourceInfo::new(s);
+                                let mut cost = *room_data.get(&s.pos()).unwrap_or(&0) * 10
                                     + creep.pos().get_range_to(s.pos());
+
+                                let source_busy = source_info.nearby_creep_count
+                                    >= source_info.non_wall_terrain_count;
+                                if source_busy {
+                                    cost += 20;
+                                }
                                 // info!(
-                                //     "Source Travel Cost: {}: {} + {} = {}",
+                                //     "Source Travel Cost: {}: {} + {} + {} = {}",
                                 //     s.pos(),
                                 //     *room_data.get(&s.pos()).unwrap_or(&0) * 5,
                                 //     creep.pos().get_range_to(s.pos()),
+                                //     if source_busy { 20 } else { 0 },
                                 //     cost
                                 // );
                                 return cost;
