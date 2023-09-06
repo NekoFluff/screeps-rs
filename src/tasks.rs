@@ -430,6 +430,10 @@ impl TaskManager {
                         > 0
                     && extension.my()
                 {
+                    if self.is_pos_being_worked_on(&room.name(), &extension.pos()) {
+                        continue;
+                    }
+
                     if let Some(id) = extension.try_id() {
                         tasks.push(Box::new(TransferTask::new(id)));
                     }
@@ -489,6 +493,11 @@ impl TaskManager {
                         continue;
                     }
                 }
+
+                if self.is_pos_being_worked_on(&room.name(), &s.pos()) {
+                    continue;
+                }
+
                 let id = s.try_id().unwrap();
                 tasks.push(Box::new(RepairTask::new(id)));
             }
@@ -519,6 +528,15 @@ impl TaskManager {
         }
 
         idle_creeps
+    }
+
+    fn is_pos_being_worked_on(&self, room_name: &RoomName, pos: &Position) -> bool {
+        if let Some(room) = self.working_creeps_by_room_and_pos.get(room_name) {
+            if let Some(count) = room.get(pos) {
+                return *count > 0;
+            }
+        }
+        false
     }
 }
 
