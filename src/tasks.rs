@@ -39,7 +39,7 @@ use wasm_bindgen::JsValue;
 
 pub struct TaskManager {
     pub tasks: HashMap<ObjectId<Creep>, Box<dyn Task>>,
-    working_creeps_by_room: HashMap<RoomName, HashMap<String, u32>>,
+    working_creeps_by_room_and_type: HashMap<RoomName, HashMap<String, u32>>,
     working_creeps_by_room_and_pos: HashMap<RoomName, HashMap<Position, u32>>,
     room_links: HashMap<RoomName, LinkTypeMap>,
 }
@@ -47,21 +47,22 @@ pub struct TaskManager {
 impl TaskManager {
     pub fn new() -> TaskManager {
         let creeps = game::creeps();
-        let mut working_creeps_by_room = HashMap::new();
+        let mut working_creeps_by_room_and_type = HashMap::new();
 
         for creep in creeps.values() {
             let creep_type = get_creep_type(&creep);
             let room_name = creep.room().unwrap().name();
 
-            let count: &mut HashMap<String, u32> =
-                working_creeps_by_room.entry(room_name).or_default();
+            let count: &mut HashMap<String, u32> = working_creeps_by_room_and_type
+                .entry(room_name)
+                .or_default();
             let creep_count = count.entry(creep_type).or_insert(0);
             *creep_count += 1;
         }
 
         TaskManager {
             tasks: HashMap::new(),
-            working_creeps_by_room,
+            working_creeps_by_room_and_type,
             working_creeps_by_room_and_pos: HashMap::new(),
             room_links: HashMap::new(),
         }
@@ -200,29 +201,30 @@ impl TaskManager {
         }
     }
 
-    fn recalculate_working_creeps(&mut self) {
+    fn recalculate_working_creeps_by_room_and_type(&mut self) {
         let tasks = self.tasks.iter();
-        self.working_creeps_by_room = tasks.fold(HashMap::new(), |mut acc, (creep_id, task)| {
-            let creep = game::get_object_by_id_typed(creep_id);
-            if creep.is_none() {
-                return acc;
-            }
+        self.working_creeps_by_room_and_type =
+            tasks.fold(HashMap::new(), |mut acc, (creep_id, task)| {
+                let creep = game::get_object_by_id_typed(creep_id);
+                if creep.is_none() {
+                    return acc;
+                }
 
-            let creep = creep.unwrap();
-            let creep_type = get_creep_type(&creep);
-            if creep_type == "attacker" || creep_type == "healer" {
-                return acc;
-            }
-            let room_name = task
-                .get_target_pos()
-                .map(|p| p.room_name())
-                .unwrap_or(creep.room().unwrap().name());
+                let creep = creep.unwrap();
+                let creep_type = get_creep_type(&creep);
+                if creep_type == "attacker" || creep_type == "healer" {
+                    return acc;
+                }
+                let room_name = task
+                    .get_target_pos()
+                    .map(|p| p.room_name())
+                    .unwrap_or(creep.room().unwrap().name());
 
-            let count: &mut HashMap<String, u32> = acc.entry(room_name).or_default();
-            let creep_count = count.entry(creep_type).or_insert(0);
-            *creep_count += 1;
-            acc
-        });
+                let count: &mut HashMap<String, u32> = acc.entry(room_name).or_default();
+                let creep_count = count.entry(creep_type).or_insert(0);
+                *creep_count += 1;
+                acc
+            });
     }
 
     fn recalculate_working_creeps_by_room_and_pos(&mut self) {
@@ -287,12 +289,14 @@ impl TaskManager {
                     //     target_pos.room_name()
                     // );
 
-                    if let Some(room) = self.working_creeps_by_room.get_mut(&target_pos.room_name())
+                    if let Some(room) = self
+                        .working_creeps_by_room_and_type
+                        .get_mut(&target_pos.room_name())
                     {
                         *room.entry(get_creep_type(creep)).or_insert(0) += 1;
                     }
                     if let Some(room) = self
-                        .working_creeps_by_room
+                        .working_creeps_by_room_and_type
                         .get_mut(&creep.room().unwrap().name())
                     {
                         *room.entry(get_creep_type(creep)).or_insert(0) -= 1;
@@ -385,7 +389,7 @@ impl TaskManager {
                 }
 
                 // Only send creeps to another room if they're not already working in that room
-                if let Some(working_creeps) = self.working_creeps_by_room.get(room_name) {
+                if let Some(working_creeps) = self.working_creeps_by_room_and_type.get(room_name) {
                     let creep_type = get_creep_type(&creep);
                     if let Some(creep_count) = working_creeps.get(&creep_type) {
                         if *creep_count >= 2 {
@@ -411,7 +415,7 @@ impl TaskManager {
             }
         }
 
-        self.recalculate_working_creeps();
+        self.recalculate_working_creeps_by_room_and_type();
         self.recalculate_working_creeps_by_room_and_pos();
 
         flag_tasks
