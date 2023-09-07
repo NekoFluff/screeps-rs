@@ -280,6 +280,13 @@ impl TaskManager {
 
                 // Keep track of the room switch
                 if target_pos.room_name() != creep.room().unwrap().name() {
+                    // info!(
+                    //     "{} switched rooms from {} to {}",
+                    //     creep.name(),
+                    //     creep.room().unwrap().name(),
+                    //     target_pos.room_name()
+                    // );
+
                     if let Some(room) = self.working_creeps_by_room.get_mut(&target_pos.room_name())
                     {
                         *room.entry(get_creep_type(creep)).or_insert(0) += 1;
@@ -346,8 +353,6 @@ impl TaskManager {
     }
 
     pub fn assign_tasks(&mut self) -> Vec<Box<dyn Task>> {
-        self.recalculate_working_creeps();
-        self.recalculate_working_creeps_by_room_and_pos();
         let idle_creeps = self.get_idle_creeps();
         let mut flag_tasks = self.get_flag_tasks();
         let mut room_tasks_map = HashMap::new();
@@ -405,6 +410,9 @@ impl TaskManager {
                 self.add_task(&creep, task)
             }
         }
+
+        self.recalculate_working_creeps();
+        self.recalculate_working_creeps_by_room_and_pos();
 
         flag_tasks
     }
