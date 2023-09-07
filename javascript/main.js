@@ -41,10 +41,6 @@ module.exports.loop = function () {
             wasm_module.loop();
         }
     } catch (error) {
-        console_error("caught exception:", error);
-        if (error.stack) {
-            console_error("stack trace:", error.stack);
-        }
         console_error("resetting VM next tick.");
         wasm_module = null;
     }
