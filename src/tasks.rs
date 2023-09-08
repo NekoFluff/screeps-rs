@@ -349,7 +349,11 @@ impl TaskManager {
             self.tasks.remove(cancelled_task);
         }
         for (creep_id, task) in switch_tasks.borrow_mut().drain() {
-            info!("{}'s task was switched to {:?}", creep_id, task);
+            info!(
+                "{}'s task was switched to {:?}",
+                creep_id.resolve().unwrap().name(),
+                task
+            );
             if let Some(creep) = game::get_object_by_id_typed(&creep_id) {
                 self.add_task(&creep, task);
             }
@@ -392,7 +396,7 @@ impl TaskManager {
                 if let Some(working_creeps) = self.working_creeps_by_room_and_type.get(room_name) {
                     let creep_type = get_creep_type(&creep);
                     if let Some(creep_count) = working_creeps.get(&creep_type) {
-                        if *creep_count >= 2 {
+                        if *creep_count > 0 {
                             // info!(
                             //     "{} has {} {} creeps working in it already",
                             //     room_name.to_string(),
@@ -652,13 +656,15 @@ impl TaskManager {
                         .store()
                         .get_capacity(Some(ResourceType::Energy))
                         / 2
-                    && storage_link.pos().in_range_to(controller.pos(), 2)
                 {
                     if let Some(id) = storage_link.try_id() {
                         // get storage closest to link
                         let storage = structures
                             .iter()
-                            .filter(|s| s.structure_type() == StructureType::Storage)
+                            .filter(|s| {
+                                s.structure_type() == StructureType::Storage
+                                    && s.pos().in_range_to(storage_link.pos(), 2)
+                            })
                             .min_by(|a, b| {
                                 storage_link
                                     .pos()

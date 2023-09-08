@@ -76,7 +76,7 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
         }
 
         let target = target.unwrap();
-        if target.store().get_free_capacity(None) > 0 {
+        if target.store().get_free_capacity(Some(ResourceType::Energy)) == 0 {
             if let Some(extension_id) = self.get_nearest_extension(creep) {
                 switch(
                     creep.try_id().unwrap(),
