@@ -1,3 +1,5 @@
+use core::panic;
+
 use screeps::{
     Creep, HasPosition, OwnedStructureProperties, Room, RoomName, SharedCreepProperties,
     StructureObject, StructureProperties, StructureType,
@@ -44,4 +46,5 @@ pub fn pause_script() {
     super::PAUSE_SCRIPT.with(|p| {
         *p.borrow_mut() = true;
     });
+    panic!("Paused script");
 }
