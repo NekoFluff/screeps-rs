@@ -4,13 +4,13 @@ use log::*;
 use screeps::{
     find, game, Creep, HasHits, HasPosition, HasTypedId, MaybeHasTypedId, ObjectId,
     OwnedStructureProperties, Part, Position, ResourceType, Room, RoomName, RoomPosition,
-    SharedCreepProperties, StructureObject, StructureProperties, StructureType,
+    SharedCreepProperties, Source, StructureObject, StructureProperties, StructureType,
 };
 
 mod attack;
 mod build;
 mod claim;
-mod harvest;
+mod harvestsource;
 mod heal;
 mod repair;
 mod transfer;
@@ -22,7 +22,7 @@ mod withdraw;
 pub use attack::AttackTask;
 pub use build::BuildTask;
 pub use claim::ClaimTask;
-pub use harvest::HarvestTask;
+pub use harvestsource::HarvestSourceTask;
 pub use heal::HealTask;
 pub use repair::RepairTask;
 pub use transfer::TransferTask;
@@ -41,7 +41,7 @@ pub struct TaskManager {
     pub tasks: HashMap<ObjectId<Creep>, Box<dyn Task>>,
     working_creeps_by_room_and_type: HashMap<RoomName, HashMap<String, u32>>,
     working_creeps_by_room_and_pos: HashMap<RoomName, HashMap<Position, u32>>,
-    room_links: HashMap<RoomName, LinkTypeMap>,
+    pub room_links: HashMap<RoomName, LinkTypeMap>,
 }
 
 impl TaskManager {
@@ -93,29 +93,29 @@ impl TaskManager {
             .filter(|s| s.structure_type() == StructureType::Storage)
             .collect::<Vec<_>>();
 
-        let controller = room.controller().unwrap();
-
-        'link_loop: for link in links {
-            for source in sources.iter() {
-                if link.pos().in_range_to(source.pos(), 2) {
-                    map.source_links.push(link.clone());
-                    continue 'link_loop;
+        if let Some(controller) = room.controller() {
+            'link_loop: for link in links {
+                for source in sources.iter() {
+                    if link.pos().in_range_to(source.pos(), 2) {
+                        map.source_links.push(link.clone());
+                        continue 'link_loop;
+                    }
                 }
-            }
 
-            if link.pos().in_range_to(controller.pos(), 2) {
-                map.controller_links.push(link.clone());
-                continue;
-            }
-
-            for storage in storages.iter() {
-                if link.pos().in_range_to(storage.pos(), 2) {
-                    map.storage_links.push(link.clone());
-                    continue 'link_loop;
+                if link.pos().in_range_to(controller.pos(), 2) {
+                    map.controller_links.push(link.clone());
+                    continue;
                 }
-            }
 
-            map.unknown_links.push(link.clone());
+                for storage in storages.iter() {
+                    if link.pos().in_range_to(storage.pos(), 2) {
+                        map.storage_links.push(link.clone());
+                        continue 'link_loop;
+                    }
+                }
+
+                map.unknown_links.push(link.clone());
+            }
         }
 
         map
@@ -134,15 +134,15 @@ impl TaskManager {
                 if let StructureObject::StructureLink(source_link) = link {
                     if source_link
                         .store()
-                        .get_free_capacity(Some(ResourceType::Energy))
-                        == 0
+                        .get_used_capacity(Some(ResourceType::Energy))
+                        > 0
                     {
                         for storage_link in link_map.storage_links.iter() {
                             if let StructureObject::StructureLink(storage_link) = storage_link {
                                 if storage_link
                                     .store()
                                     .get_free_capacity(Some(ResourceType::Energy))
-                                    > 0
+                                    > 50
                                 {
                                     info!("transferring energy from source to storage");
                                     source_link
@@ -164,7 +164,7 @@ impl TaskManager {
                                 if controller_link
                                     .store()
                                     .get_free_capacity(Some(ResourceType::Energy))
-                                    > 0
+                                    > 50
                                 {
                                     info!("transferring energy from source to controller");
                                     source_link
@@ -431,17 +431,10 @@ impl TaskManager {
         creep: &Creep,
         task_list: &mut Vec<Box<dyn Task>>,
     ) -> Option<Box<dyn Task>> {
-        let creep_parts = creep.body().iter().map(|p| p.part()).collect::<Vec<Part>>();
-
         // (index, task)
         let mut similar_tasks: Vec<(usize, &Box<dyn Task>)> = vec![];
         for (index, task) in task_list.iter().enumerate() {
-            if similar_tasks.is_empty()
-                && task
-                    .requires_body_parts()
-                    .iter()
-                    .all(|p| creep_parts.contains(p))
-            {
+            if similar_tasks.is_empty() && can_creep_handle_task(creep, &**task) {
                 if task.requires_energy()
                     && creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0
                     || !task.requires_energy()
@@ -530,11 +523,18 @@ impl TaskManager {
     }
 
     fn get_room_tasks(&self, room: Room) -> Vec<Box<dyn Task>> {
+        let controller = room.controller();
+        if controller.is_none() {
+            return Vec::new();
+        }
+
+        let controller = controller.unwrap();
+
         let mut tasks: Vec<Box<dyn Task>> = Vec::new();
 
         let structures = room.find(find::STRUCTURES, None);
+        let my_structures = room.find(find::MY_STRUCTURES, None);
         let construction_sites = room.find(find::CONSTRUCTION_SITES, None);
-        let controller = room.controller().unwrap();
         let enemy_creeps = room.find(find::HOSTILE_CREEPS, None);
 
         // attack
@@ -568,7 +568,7 @@ impl TaskManager {
                     && tower.store().get_free_capacity(Some(ResourceType::Energy)) > 0
                 {
                     if let Some(id) = tower.try_id() {
-                        tasks.push(Box::new(TransferTask::new(id)));
+                        tasks.push(Box::new(TransferTask::new(id, None)));
                     }
                 }
             }
@@ -588,13 +588,35 @@ impl TaskManager {
                         > 0
                     && extension.my()
                 {
-                    if self.is_pos_being_worked_on(&room.name(), &extension.pos()) {
+                    if self.is_pos_being_worked_on(&room.name(), &extension.pos(), 1) {
                         continue;
                     }
 
                     if let Some(id) = extension.try_id() {
-                        tasks.push(Box::new(TransferTask::new(id)));
+                        let transfer_task = Box::new(TransferTask::new(id, None));
+
+                        tasks.push(allow_withdrawal_from_storage(&room, transfer_task));
+
                         extension_transfer_tasks_exist = true;
+                    }
+                }
+            }
+        }
+
+        // spawn
+        let spawns = structures
+            .iter()
+            .filter(|s| s.structure_type() == StructureType::Spawn);
+
+        for spawn in spawns {
+            if let StructureObject::StructureSpawn(spawn) = spawn {
+                if spawn.is_active()
+                    && spawn.store().get_free_capacity(Some(ResourceType::Energy)) > 0
+                {
+                    if let Some(id) = spawn.try_id() {
+                        let transfer_task = Box::new(TransferTask::new(id, None));
+
+                        tasks.push(allow_withdrawal_from_storage(&room, transfer_task));
                     }
                 }
             }
@@ -609,7 +631,7 @@ impl TaskManager {
             .iter()
         {
             if let StructureObject::StructureLink(controller_link) = controller_link {
-                if self.is_pos_being_worked_on(&room.name(), &controller_link.pos()) {
+                if self.is_pos_being_worked_on(&room.name(), &controller_link.pos(), 2) {
                     continue;
                 }
 
@@ -645,17 +667,14 @@ impl TaskManager {
             .iter()
         {
             if let StructureObject::StructureLink(storage_link) = storage_link {
-                if self.is_pos_being_worked_on(&room.name(), &storage_link.pos()) {
+                if self.is_pos_being_worked_on(&room.name(), &storage_link.pos(), 1) {
                     continue;
                 }
 
                 if storage_link
                     .store()
                     .get_used_capacity(Some(ResourceType::Energy))
-                    > storage_link
-                        .store()
-                        .get_capacity(Some(ResourceType::Energy))
-                        / 2
+                    > 0
                 {
                     if let Some(id) = storage_link.try_id() {
                         // get storage closest to link
@@ -664,6 +683,11 @@ impl TaskManager {
                             .filter(|s| {
                                 s.structure_type() == StructureType::Storage
                                     && s.pos().in_range_to(storage_link.pos(), 2)
+                                    && s.as_has_store()
+                                        .unwrap()
+                                        .store()
+                                        .get_free_capacity(Some(ResourceType::Energy))
+                                        >= 0
                             })
                             .min_by(|a, b| {
                                 storage_link
@@ -674,7 +698,7 @@ impl TaskManager {
 
                         if let Some(storage) = storage {
                             if let StructureObject::StructureStorage(storage) = storage {
-                                let transfer_task = Box::new(TransferTask::new(storage.id()));
+                                let transfer_task = Box::new(TransferTask::new(storage.id(), None));
 
                                 tasks.push(Box::new(WithdrawTask::new(
                                     id,
@@ -690,23 +714,6 @@ impl TaskManager {
             }
         }
 
-        // spawn
-        let spawns = structures
-            .iter()
-            .filter(|s| s.structure_type() == StructureType::Spawn);
-
-        for spawn in spawns {
-            if let StructureObject::StructureSpawn(spawn) = spawn {
-                if spawn.is_active()
-                    && spawn.store().get_free_capacity(Some(ResourceType::Energy)) > 0
-                {
-                    if let Some(id) = spawn.try_id() {
-                        tasks.push(Box::new(TransferTask::new(id)));
-                    }
-                }
-            }
-        }
-
         // healing
         // if creep.hits() < creep.hits_max() {
         //     info!("{} needs healing", creep.name());
@@ -717,14 +724,17 @@ impl TaskManager {
         // construction sites
         for construction_site in construction_sites.iter() {
             if let Some(id) = construction_site.try_id() {
-                tasks.push(Box::new(BuildTask::new(id)));
+                tasks.push(allow_withdrawal_from_storage(
+                    &room,
+                    Box::new(BuildTask::new(id)),
+                ));
             }
         }
 
         // repair
         for structure in structures.iter() {
             let s = structure.as_structure();
-            if self.is_pos_being_worked_on(&room.name(), &s.pos()) {
+            if self.is_pos_being_worked_on(&room.name(), &s.pos(), 1) {
                 continue;
             }
 
@@ -748,7 +758,10 @@ impl TaskManager {
                 }
 
                 let id = s.try_id().unwrap();
-                tasks.push(Box::new(RepairTask::new(id)));
+                tasks.push(allow_withdrawal_from_storage(
+                    &room,
+                    Box::new(RepairTask::new(id)),
+                ));
             }
         }
 
@@ -779,17 +792,27 @@ impl TaskManager {
         idle_creeps
     }
 
-    fn is_pos_being_worked_on(&self, room_name: &RoomName, pos: &Position) -> bool {
+    fn is_pos_being_worked_on(
+        &self,
+        room_name: &RoomName,
+        pos: &Position,
+        target_count: u32,
+    ) -> bool {
         if let Some(room) = self.working_creeps_by_room_and_pos.get(room_name) {
             if let Some(count) = room.get(pos) {
-                return *count > 0;
+                return *count >= target_count;
             }
         }
         false
     }
 
     fn get_default_task_for_creep(&self, creep: &Creep) -> Option<Box<dyn Task>> {
+        let creep_type = get_creep_type(creep);
         let creep_parts = creep.body().iter().map(|p| p.part()).collect::<Vec<Part>>();
+
+        if creep_type == "source_harvester" {
+            return self.get_harvest_source_task(creep, false, true);
+        }
 
         if creep_parts.contains(&Part::Attack) {
             if let Some(defend_flag) = game::flags().values().find(|f| f.name() == "defend") {
@@ -808,60 +831,104 @@ impl TaskManager {
             return None;
         } else if creep_parts.contains(&Part::Work) {
             if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 {
-                // Upgrade Controller
-                return Some(Box::new(UpgradeTask::new(
-                    creep.room().unwrap().controller().unwrap().id(),
-                )));
-            } else {
-                // Gather energy
-                let room = creep.room().unwrap();
-                if let Some(controller) = room.controller() {
-                    if controller.my() {
-                        let mut sources = room.find(find::SOURCES_ACTIVE, None);
-
-                        sources.sort_by_key(|s| {
-                            if let Some(room_data) =
-                                self.working_creeps_by_room_and_pos.get(&room.name())
-                            {
-                                let source_info = super::metadata::SourceInfo::new(s);
-                                let mut cost = *room_data.get(&s.pos()).unwrap_or(&0) * 10
-                                    + creep.pos().get_range_to(s.pos());
-
-                                let source_busy = source_info.nearby_creep_count
-                                    >= source_info.non_wall_terrain_count;
-                                if source_busy {
-                                    cost += 20;
-                                }
-                                // info!(
-                                //     "Source Travel Cost: {}: {} + {} + {} = {}",
-                                //     s.pos(),
-                                //     *room_data.get(&s.pos()).unwrap_or(&0) * 5,
-                                //     creep.pos().get_range_to(s.pos()),
-                                //     if source_busy { 20 } else { 0 },
-                                //     cost
-                                // );
-                                return cost;
-                            }
-                            0
-                        });
-
-                        if let Some(source) = sources.first() {
-                            return Some(Box::new(HarvestTask::new(source.id())));
-                        } else {
-                            // There are no sources to gather from and the creep has no energy
-                            // so do nothing
-                            return None;
-                        }
-                    } else {
-                        // Go back to an owned room if we can't harvest in the current room
-                        return get_travel_home_task(creep);
-                    }
+                let controller = creep.room().unwrap().controller().unwrap();
+                if (controller.my()) {
+                    return Some(Box::new(UpgradeTask::new(
+                        creep.room().unwrap().controller().unwrap().id(),
+                    )));
+                } else {
+                    return self.get_harvest_source_task(creep, true, false);
                 }
+            } else {
+                return self.get_harvest_source_task(creep, true, false);
             }
         }
 
         if !utils::is_mine(&creep.room().unwrap()) {
             return get_travel_home_task(creep);
+        }
+
+        None
+    }
+
+    fn get_harvest_source_task(
+        &self,
+        creep: &Creep,
+        active_only: bool,
+        link_required: bool,
+    ) -> Option<Box<dyn Task>> {
+        // Gather energy
+        let room = creep.room().unwrap();
+        if let Some(controller) = room.controller() {
+            if controller.my() {
+                let mut sources: Vec<Source>;
+                if active_only {
+                    sources = room.find(find::SOURCES_ACTIVE, None);
+                } else {
+                    sources = room.find(find::SOURCES, None);
+                };
+
+                if link_required {
+                    let links = self.room_links.get(&room.name()).unwrap();
+
+                    sources = sources
+                        .drain(..)
+                        .filter(|s| {
+                            for source_link in links.source_links.iter() {
+                                if let StructureObject::StructureLink(source_link) = source_link {
+                                    if source_link.pos().in_range_to(s.pos(), 4) {
+                                        return true;
+                                    }
+                                }
+                            }
+
+                            false
+                        })
+                        .collect::<Vec<_>>();
+                }
+
+                sources.sort_by_key(|s| {
+                    let source_info = super::metadata::SourceInfo::new(s, Some(creep));
+                    let mut cost = 0;
+
+                    if let Some(room_data) = self.working_creeps_by_room_and_pos.get(&room.name()) {
+                        cost += *room_data.get(&s.pos()).unwrap_or(&0) * 10
+                            + creep.pos().get_range_to(s.pos());
+                    }
+
+                    let source_busy =
+                        source_info.nearby_creep_count >= source_info.non_wall_terrain_count;
+                    if source_busy {
+                        cost += 20;
+                    }
+
+                    let has_dedicated_source_harvester =
+                        source_info.nearby_source_harvester_count > 0;
+                    if has_dedicated_source_harvester {
+                        cost += 1000;
+                    }
+
+                    // info!(
+                    //     "Source Travel Cost: {}: [range {}] {}",
+                    //     s.pos(),
+                    //     creep.pos().get_range_to(s.pos()),
+                    //     cost
+                    // );
+
+                    cost
+                });
+
+                if let Some(source) = sources.first() {
+                    return Some(Box::new(HarvestSourceTask::new(source.id())));
+                } else {
+                    // There are no sources to gather from and the creep has no energy
+                    // so do nothing
+                    return None;
+                }
+            } else {
+                // Go back to an owned room if we can't harvest in the current room
+                return get_travel_home_task(creep);
+            }
         }
 
         None
@@ -888,6 +955,49 @@ fn get_travel_home_task(creep: &Creep) -> Option<Box<dyn Task>> {
     } else {
         None
     }
+}
+
+fn allow_withdrawal_from_storage(room: &Room, next_task: Box<dyn Task>) -> Box<dyn Task> {
+    let structures = room.find(find::STRUCTURES, None);
+    let storage = structures
+        .iter()
+        .filter(|s| {
+            s.structure_type() == StructureType::Storage
+                && s.as_has_store()
+                    .unwrap()
+                    .store()
+                    .get_used_capacity(Some(ResourceType::Energy))
+                    > 0
+        })
+        .last();
+
+    if let Some(storage) = storage {
+        if let StructureObject::StructureStorage(storage) = storage {
+            let withdraw_task = Box::new(WithdrawTask::new(storage.id(), None, Some(next_task)));
+
+            return withdraw_task;
+        }
+    }
+
+    next_task
+}
+
+fn can_creep_handle_task(creep: &Creep, task: &dyn Task) -> bool {
+    let creep_type = get_creep_type(creep);
+    let creep_parts = creep.body().iter().map(|p| p.part()).collect::<Vec<Part>>();
+    let task_parts = task.requires_body_parts();
+
+    for part in task_parts {
+        if !creep_parts.contains(&part) {
+            return false;
+        }
+    }
+
+    if creep_type == "source_harvester" {
+        return task.get_type() == TaskType::HarvestSource;
+    }
+
+    true
 }
 
 type CompleteCallback = Box<dyn FnOnce(ObjectId<Creep>)>;
@@ -930,7 +1040,7 @@ pub trait Task: Debug {
 #[derive(Debug, PartialEq)]
 pub enum TaskType {
     Build,
-    Harvest,
+    HarvestSource,
     Heal,
     Repair,
     Transfer,

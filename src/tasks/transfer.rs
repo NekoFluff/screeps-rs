@@ -8,11 +8,12 @@ use screeps::{
 
 pub struct TransferTask<T: Transferable + Resolvable + HasStore> {
     target: ObjectId<T>,
+    next_task: Option<Box<dyn super::Task>>,
 }
 
 impl<T: Transferable + Resolvable + HasStore> TransferTask<T> {
-    pub fn new(target: ObjectId<T>) -> TransferTask<T> {
-        TransferTask { target }
+    pub fn new(target: ObjectId<T>, next_task: Option<Box<dyn super::Task>>) -> TransferTask<T> {
+        TransferTask { target, next_task }
     }
 
     fn get_nearest_extension(&self, creep: &Creep) -> Option<ObjectId<StructureExtension>> {
@@ -65,7 +66,11 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
         switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
     ) {
         if creep.store().get_used_capacity(Some(ResourceType::Energy)) == 0 {
-            complete(creep.try_id().unwrap());
+            if self.next_task.is_some() {
+                switch(creep.try_id().unwrap(), self.next_task.take().unwrap());
+            } else {
+                complete(creep.try_id().unwrap());
+            }
             return;
         }
 
@@ -76,12 +81,17 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
         }
 
         let target = target.unwrap();
-        if target.store().get_free_capacity(Some(ResourceType::Energy)) == 0 {
+        let creep_type = super::utils::get_creep_type(creep);
+        if creep_type != "source_harvester"
+            && target.store().get_free_capacity(Some(ResourceType::Energy)) == 0
+        {
             if let Some(extension_id) = self.get_nearest_extension(creep) {
                 switch(
                     creep.try_id().unwrap(),
-                    Box::new(TransferTask::new(extension_id)),
+                    Box::new(TransferTask::new(extension_id, None)),
                 );
+            } else if self.next_task.is_some() {
+                switch(creep.try_id().unwrap(), self.next_task.take().unwrap());
             } else {
                 complete(creep.try_id().unwrap());
             }
@@ -94,12 +104,14 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
                 .unwrap_or_else(|e| {
                     info!("couldn't transfer: {:?}", e);
 
-                    if let Some(extension_id) = self.get_nearest_extension(creep) {
-                        switch(
-                            creep.try_id().unwrap(),
-                            Box::new(TransferTask::new(extension_id)),
-                        );
-                        return;
+                    if creep_type != "source_harvester" {
+                        if let Some(extension_id) = self.get_nearest_extension(creep) {
+                            switch(
+                                creep.try_id().unwrap(),
+                                Box::new(TransferTask::new(extension_id, None)),
+                            );
+                            return;
+                        }
                     }
 
                     cancel(creep.try_id().unwrap());

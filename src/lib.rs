@@ -75,25 +75,78 @@ pub fn game_loop() {
             let sources = room.find(find::SOURCES, None);
             let source_infos = sources
                 .iter()
-                .map(metadata::SourceInfo::new)
+                .map(|s| metadata::SourceInfo::new(s, None))
                 .collect::<Vec<_>>();
 
-            spawn_goals.push(SpawnGoal {
-                name: "worker".to_string(),
-                body: vec![Part::Move, Part::Move, Part::Carry, Part::Work],
-                body_upgrades: vec![Part::Move, Part::Carry, Part::Work],
-                max_body_upgrades: 5,
-                source_modifier: 0,
-                count: std::cmp::min(
-                    source_infos
-                        .iter()
-                        .map(|s| s.non_wall_terrain_count)
-                        .sum::<u32>()
-                        + 2,
-                    source_infos.len() as u32 * 4,
-                ),
-                is_global: false,
-            });
+            let controller = room.controller();
+            let link_count = room
+                .find(find::MY_STRUCTURES, None)
+                .iter()
+                .filter(|s| s.structure_type() == StructureType::Link)
+                .count();
+
+            if controller.is_none() || controller.unwrap().level() < 5 || link_count < 2 {
+                spawn_goals.push(SpawnGoal {
+                    name: "worker".to_string(),
+                    body: vec![Part::Move, Part::Move, Part::Carry, Part::Work],
+                    body_upgrades: vec![Part::Move, Part::Carry, Part::Work],
+                    max_body_upgrades: 4,
+                    source_modifier: 0,
+                    count: std::cmp::min(
+                        source_infos
+                            .iter()
+                            .map(|s| s.non_wall_terrain_count)
+                            .sum::<u32>()
+                            + 2,
+                        source_infos.len() as u32 * 4,
+                    ),
+                    is_global: false,
+                });
+            } else {
+                let source_link_count = task_manager
+                    .room_links
+                    .get(&room.name())
+                    .unwrap()
+                    .source_links
+                    .len();
+
+                spawn_goals.push(SpawnGoal {
+                    name: "worker".to_string(),
+                    body: vec![Part::Move, Part::Move, Part::Carry, Part::Work],
+                    body_upgrades: vec![Part::Move, Part::Carry, Part::Work],
+                    max_body_upgrades: 4,
+                    source_modifier: 0,
+                    count: if source_link_count > 1 { 3 } else { 2 },
+                    is_global: false,
+                });
+
+                spawn_goals.push(SpawnGoal {
+                    name: "source_harvester".to_string(),
+                    body: vec![
+                        Part::Move,
+                        Part::Move,
+                        Part::Carry,
+                        Part::Carry,
+                        Part::Carry,
+                        Part::Carry,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                    ],
+                    body_upgrades: vec![],
+                    max_body_upgrades: 0,
+                    source_modifier: 0,
+                    count: source_link_count as u32,
+                    is_global: false,
+                });
+            }
 
             spawn_goals.push(SpawnGoal {
                 name: "melee".to_string(),
@@ -143,6 +196,12 @@ impl LinkTypeMap {
             controller_links: Vec::new(),
             unknown_links: Vec::new(),
         }
+    }
+}
+
+impl Default for LinkTypeMap {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

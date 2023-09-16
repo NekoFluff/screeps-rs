@@ -28,6 +28,9 @@ impl<T: Withdrawable + Resolvable + HasStore> WithdrawTask<T> {
 
 impl<T: Withdrawable + Resolvable + HasStore> super::Task for WithdrawTask<T> {
     fn get_type(&self) -> super::TaskType {
+        if self.next_task.is_some() {
+            return self.next_task.as_ref().unwrap().get_type();
+        }
         super::TaskType::Withdraw
     }
 
@@ -103,6 +106,9 @@ impl<T: Withdrawable + Resolvable + HasStore> super::Task for WithdrawTask<T> {
     }
 
     fn get_target_pos(&self) -> Option<screeps::Position> {
+        if self.next_task.is_some() {
+            return self.next_task.as_ref().unwrap().get_target_pos();
+        }
         self.target.resolve().map(|target| target.pos())
     }
 
