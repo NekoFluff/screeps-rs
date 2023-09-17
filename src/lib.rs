@@ -125,28 +125,31 @@ pub fn game_loop() {
 
             if let Some(link_type_map) = task_manager.room_links.get(&room.name()) {
                 let controller_link_count = link_type_map.controller_links.len();
+                let source_link_count = link_type_map.source_links.len();
 
+                let mut body = vec![
+                    Part::Move,
+                    Part::Move,
+                    Part::Carry,
+                    Part::Carry,
+                    Part::Carry,
+                    Part::Carry,
+                ];
+                for _ in 0..source_link_count {
+                    body.append(&mut vec![
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                    ]);
+                }
                 spawn_goals.push(SpawnGoal {
                     name: "upgrader".to_string(),
-                    body: vec![
-                        Part::Move,
-                        Part::Move,
-                        Part::Carry,
-                        Part::Carry,
-                        Part::Carry,
-                        Part::Carry,
-                        Part::Carry,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                    ],
+                    body,
                     body_upgrades: vec![],
                     max_body_upgrades: 0,
                     source_modifier: 0,
