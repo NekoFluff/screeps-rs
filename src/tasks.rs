@@ -139,6 +139,10 @@ impl TaskManager {
             // );
             'source_loop: for link in link_map.source_links.iter() {
                 if let StructureObject::StructureLink(source_link) = link {
+                    if source_link.cooldown() > 0 {
+                        continue;
+                    }
+
                     if source_link
                         .store()
                         .get_used_capacity(Some(ResourceType::Energy))
