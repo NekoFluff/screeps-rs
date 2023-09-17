@@ -82,10 +82,19 @@ pub fn game_loop() {
                 .map(|s| metadata::SourceInfo::new(s, None))
                 .collect::<Vec<_>>();
 
+            let link_type_map = LinkTypeMap::new();
+            let link_type_map = task_manager
+                .room_links
+                .get(&room.name())
+                .unwrap_or(&link_type_map);
+
+            let source_link_has_output = !(link_type_map.storage_links.is_empty()
+                && link_type_map.controller_links.is_empty());
+
             let target_worker_count = source_infos
                 .iter()
                 .map(|s| {
-                    if !s.has_link {
+                    if !s.has_link || !source_link_has_output {
                         s.non_wall_terrain_count
                     } else {
                         0
@@ -94,77 +103,81 @@ pub fn game_loop() {
                 .sum::<u32>()
                 + 1;
 
-            if let Some(link_type_map) = task_manager.room_links.get(&room.name()) {
-                let source_link_count = link_type_map.source_links.len();
+            let source_link_count = link_type_map.source_links.len();
 
-                spawn_goals.push(SpawnGoal {
-                    name: "source_harvester".to_string(),
-                    body: vec![
-                        Part::Move,
-                        Part::Move,
-                        Part::Move,
-                        Part::Carry,
-                        Part::Carry,
-                        Part::Carry,
-                        Part::Carry,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                    ],
-                    body_upgrades: vec![],
-                    max_body_upgrades: 0,
-                    source_modifier: 0,
-                    count: source_link_count as u32,
-                    is_global: false,
-                });
-            }
-
-            if let Some(link_type_map) = task_manager.room_links.get(&room.name()) {
-                let controller_link_count = link_type_map.controller_links.len();
-                let source_link_count = link_type_map.source_links.len();
-
-                let mut body = vec![
+            spawn_goals.push(SpawnGoal {
+                name: "source_harvester".to_string(),
+                body: vec![
+                    Part::Move,
                     Part::Move,
                     Part::Move,
                     Part::Carry,
                     Part::Carry,
                     Part::Carry,
                     Part::Carry,
-                ];
-                for _ in 0..source_link_count {
-                    body.append(&mut vec![
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                        Part::Work,
-                    ]);
-                }
-                spawn_goals.push(SpawnGoal {
-                    name: "upgrader".to_string(),
-                    body,
-                    body_upgrades: vec![],
-                    max_body_upgrades: 0,
-                    source_modifier: 0,
-                    count: controller_link_count as u32,
-                    is_global: false,
-                });
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                ],
+                body_upgrades: vec![],
+                max_body_upgrades: 0,
+                source_modifier: 0,
+                count: if source_link_has_output {
+                    source_link_count as u32
+                } else {
+                    0
+                },
+                is_global: false,
+            });
+
+            let controller_link_count = link_type_map.controller_links.len();
+            let source_link_count = link_type_map.source_links.len();
+
+            let mut body = vec![
+                Part::Move,
+                Part::Move,
+                Part::Carry,
+                Part::Carry,
+                Part::Carry,
+                Part::Carry,
+            ];
+            for _ in 0..source_link_count {
+                body.append(&mut vec![
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                    Part::Work,
+                ]);
             }
+            spawn_goals.push(SpawnGoal {
+                name: "upgrader".to_string(),
+                body,
+                body_upgrades: vec![],
+                max_body_upgrades: 0,
+                source_modifier: 0,
+                count: if source_link_count > 0 {
+                    controller_link_count as u32
+                } else {
+                    0
+                },
+                is_global: false,
+            });
 
             spawn_goals.push(SpawnGoal {
                 name: "worker".to_string(),
