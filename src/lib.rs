@@ -88,7 +88,7 @@ pub fn game_loop() {
                     }
                 })
                 .sum::<u32>()
-                + 2;
+                + 3;
 
             if let Some(link_type_map) = task_manager.room_links.get(&room.name()) {
                 let source_link_count = link_type_map.source_links.len();
@@ -101,9 +101,6 @@ pub fn game_loop() {
                         Part::Carry,
                         Part::Carry,
                         Part::Carry,
-                        Part::Carry,
-                        Part::Work,
-                        Part::Work,
                         Part::Work,
                         Part::Work,
                         Part::Work,
@@ -136,7 +133,7 @@ pub fn game_loop() {
                 body: vec![Part::Move, Part::Move, Part::Attack, Part::Attack],
                 body_upgrades: vec![],
                 max_body_upgrades: 0,
-                count: 2,
+                count: 0,
                 source_modifier: 0,
                 is_global: true, // TODO: Fix defend flag mechanic
             });

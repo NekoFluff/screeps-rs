@@ -2,8 +2,8 @@ use std::fmt::Debug;
 
 use log::*;
 use screeps::{
-    Creep, HasPosition, MaybeHasTypedId, ObjectId, ResourceType, SharedCreepProperties, Source,
-    StructureObject,
+    Creep, ErrorCode, HasPosition, MaybeHasTypedId, ObjectId, ResourceType, SharedCreepProperties,
+    Source, StructureObject,
 };
 
 use crate::utils;
@@ -72,7 +72,7 @@ impl super::Task for HarvestSourceTask {
             } else {
                 let result = creep.move_to(&source);
 
-                if result.is_err() {
+                if result.is_err() && result.err().unwrap() != ErrorCode::Tired {
                     self.move_failure_count += 1;
                     if self.move_failure_count >= 3 {
                         cancel(creep.try_id().unwrap());
