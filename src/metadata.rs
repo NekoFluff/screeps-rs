@@ -106,3 +106,7 @@ impl SourceInfo {
         }
     }
 }
+
+struct RoomInfo {
+    pub sources: Vec<SourceInfo>,
+}
