@@ -3,10 +3,8 @@ use std::fmt::Debug;
 use log::*;
 use screeps::{
     Creep, ErrorCode, HasPosition, MaybeHasTypedId, ObjectId, ResourceType, SharedCreepProperties,
-    Source, StructureObject,
+    Source,
 };
-
-use crate::utils;
 
 pub struct HarvestSourceTask {
     target: ObjectId<Source>,
@@ -32,10 +30,8 @@ impl super::Task for HarvestSourceTask {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
+        _switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
     ) {
-        let creep_type = super::utils::get_creep_type(creep);
-        let room = creep.room().unwrap();
         if creep.store().get_free_capacity(Some(ResourceType::Energy)) == 0 {
             complete(creep.try_id().unwrap());
             return;

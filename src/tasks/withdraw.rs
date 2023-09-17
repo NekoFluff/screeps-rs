@@ -2,8 +2,8 @@ use std::fmt::Debug;
 
 use log::*;
 use screeps::{
-    Creep, ErrorCode, HasPosition, HasStore, MaybeHasTypedId, ObjectId, Resolvable, ResourceType,
-    SharedCreepProperties, StructureController, Withdrawable,
+    Creep, HasPosition, HasStore, MaybeHasTypedId, ObjectId, Resolvable, ResourceType,
+    SharedCreepProperties, Withdrawable,
 };
 
 pub struct WithdrawTask<T: Withdrawable + Resolvable + HasStore> {
@@ -26,7 +26,7 @@ impl<T: Withdrawable + Resolvable + HasStore> super::Task for WithdrawTask<T> {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
+        _switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
     ) {
         let target = self.target.resolve();
         if target.is_none() {

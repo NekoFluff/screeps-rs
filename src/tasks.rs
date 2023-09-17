@@ -204,7 +204,6 @@ impl TaskManager {
     }
 
     fn recalculate_working_creeps_by_room_and_type(&mut self) {
-        let tasks = self.tasks.iter();
         self.working_creeps_by_room_and_type = HashMap::new();
 
         for (creep_id, task_list) in self.tasks.iter_mut() {
@@ -236,7 +235,6 @@ impl TaskManager {
     }
 
     fn recalculate_working_creeps_by_room_and_pos(&mut self) {
-        let tasks = self.tasks.iter();
         self.working_creeps_by_room_and_pos = HashMap::new();
 
         for (creep_id, task_list) in self.tasks.iter_mut() {
@@ -269,7 +267,7 @@ impl TaskManager {
         }
     }
 
-    pub fn set_task_list(&mut self, creep: &Creep, mut task_list: TaskList) {
+    pub fn set_task_list(&mut self, creep: &Creep, task_list: TaskList) {
         if let Some(creep_id) = creep.try_id() {
             let task = task_list.current_task().unwrap();
             info!(
@@ -574,7 +572,6 @@ impl TaskManager {
         let mut tasks: Vec<TaskList> = Vec::new();
 
         let structures = room.find(find::STRUCTURES, None);
-        let my_structures = room.find(find::MY_STRUCTURES, None);
         let construction_sites = room.find(find::CONSTRUCTION_SITES, None);
         let enemy_creeps = room.find(find::HOSTILE_CREEPS, None);
 
@@ -786,6 +783,8 @@ impl TaskManager {
         }
 
         // repair
+        let mut repair_task_count = 0;
+        let repair_task_limit = 3;
         for structure in structures.iter() {
             let s = structure.as_structure();
             if self.is_pos_being_worked_on(&room.name(), &s.pos(), 1) {
@@ -816,6 +815,12 @@ impl TaskManager {
                     &room,
                     Box::new(RepairTask::new(id)),
                 ));
+
+                repair_task_count += 1;
+
+                if repair_task_count > repair_task_limit {
+                    break;
+                }
             }
         }
 
@@ -1069,15 +1074,13 @@ fn allow_withdrawal_from_storage(room: &Room, next_task: Box<dyn Task>) -> TaskL
         })
         .last();
 
-    if let Some(storage) = storage {
-        if let StructureObject::StructureStorage(storage) = storage {
-            let withdraw_task = Box::new(WithdrawTask::new(storage.id()));
+    if let Some(StructureObject::StructureStorage(storage)) = storage {
+        let withdraw_task = Box::new(WithdrawTask::new(storage.id()));
 
-            tasks.insert(0, withdraw_task)
-        }
+        tasks.insert(0, withdraw_task)
     }
 
-    return TaskList::new(tasks, false);
+    TaskList::new(tasks, false)
 }
 
 fn can_creep_handle_task(creep: &Creep, task: &dyn Task) -> bool {
@@ -1167,11 +1170,11 @@ impl TaskList {
         }
     }
 
-    pub fn current_task<'a>(&'a self) -> Option<&'a Box<dyn Task>> {
+    pub fn current_task(&self) -> Option<&Box<dyn Task>> {
         self.tasks.get(self.current_task_idx)
     }
 
-    pub fn current_task_mut<'a>(&'a mut self) -> Option<&'a mut Box<dyn Task>> {
+    pub fn current_task_mut(&mut self) -> Option<&mut Box<dyn Task>> {
         self.tasks.get_mut(self.current_task_idx)
     }
 

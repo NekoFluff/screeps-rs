@@ -68,7 +68,7 @@ impl SourceInfo {
                         return false;
                     }
 
-                    let creep_type = super::utils::get_creep_type(&creep);
+                    let creep_type = super::utils::get_creep_type(creep);
                     if creep_type == "source_harvester" {
                         return true;
                     }
