@@ -102,10 +102,12 @@ pub fn game_loop() {
                     body: vec![
                         Part::Move,
                         Part::Move,
+                        Part::Move,
                         Part::Carry,
                         Part::Carry,
                         Part::Carry,
                         Part::Carry,
+                        Part::Work,
                         Part::Work,
                         Part::Work,
                         Part::Work,
@@ -141,6 +143,8 @@ pub fn game_loop() {
                 ];
                 for _ in 0..source_link_count {
                     body.append(&mut vec![
+                        Part::Work,
+                        Part::Work,
                         Part::Work,
                         Part::Work,
                         Part::Work,
