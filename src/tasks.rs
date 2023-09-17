@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use log::*;
 use screeps::{
@@ -10,9 +10,11 @@ use screeps::{
 mod attack;
 mod build;
 mod claim;
-mod harvestsource;
+mod harvest_source;
 mod heal;
 mod repair;
+mod task;
+mod task_list;
 mod transfer;
 mod travel;
 mod travel_dumb;
@@ -22,9 +24,12 @@ mod withdraw;
 pub use attack::AttackTask;
 pub use build::BuildTask;
 pub use claim::ClaimTask;
-pub use harvestsource::HarvestSourceTask;
+pub use harvest_source::HarvestSourceTask;
 pub use heal::HealTask;
 pub use repair::RepairTask;
+pub use task::Task;
+pub use task::TaskType;
+pub use task_list::TaskList;
 pub use transfer::TransferTask;
 pub use travel::TravelTask;
 pub use travel_dumb::TravelDumbTask;
@@ -469,10 +474,10 @@ impl TaskManager {
         task_lists: &mut Vec<TaskList>,
     ) -> Option<TaskList> {
         // (index, task)
-        let mut similar_tasks: Vec<(usize, &Box<dyn Task>)> = vec![];
+        let mut similar_tasks: Vec<(usize, &dyn Task)> = vec![];
         for (index, task_list) in task_lists.iter().enumerate() {
             let task = task_list.current_task().unwrap();
-            if similar_tasks.is_empty() && can_creep_handle_task(creep, &**task) {
+            if similar_tasks.is_empty() && can_creep_handle_task(creep, task) {
                 if task.requires_energy()
                     && creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0
                     || !task.requires_energy()
@@ -1101,94 +1106,4 @@ fn can_creep_handle_task(creep: &Creep, task: &dyn Task) -> bool {
     }
 
     true
-}
-
-type CompleteCallback = Box<dyn FnOnce(ObjectId<Creep>)>;
-type CancelCallback = Box<dyn FnOnce(ObjectId<Creep>)>;
-type SwitchCallback = Box<dyn FnOnce(ObjectId<Creep>, TaskList)>;
-
-pub trait Task: Debug {
-    fn execute(
-        &mut self,
-        creep: &Creep,
-        complete: CompleteCallback,
-        cancel: CancelCallback,
-        switch: SwitchCallback,
-    );
-
-    /// Returns the position of the target of the task
-    fn get_target_pos(&self) -> Option<screeps::Position> {
-        None
-    }
-
-    /// Returns the priority of the task. Higher priority tasks will be executed first.
-    /// 0 is the highest priority.
-    fn get_priority(&self) -> u32 {
-        0
-    }
-
-    /// Returns the type of the task
-    fn get_type(&self) -> TaskType;
-
-    /// Returns the body parts required to perform the task
-    fn requires_body_parts(&self) -> Vec<screeps::Part> {
-        vec![Part::Work, Part::Carry]
-    }
-
-    fn requires_energy(&self) -> bool {
-        true
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum TaskType {
-    Build,
-    HarvestSource,
-    Heal,
-    Repair,
-    Transfer,
-    Upgrade,
-    Attack,
-    Travel,
-    Claim,
-    TravelDumb,
-    Withdraw,
-}
-
-pub struct TaskList {
-    tasks: Vec<Box<dyn Task>>,
-    repeat: bool,
-    current_task_idx: usize,
-}
-
-impl TaskList {
-    pub fn new(tasks: Vec<Box<dyn Task>>, repeat: bool) -> Self {
-        Self {
-            tasks,
-            repeat,
-            current_task_idx: 0,
-        }
-    }
-
-    pub fn current_task(&self) -> Option<&Box<dyn Task>> {
-        self.tasks.get(self.current_task_idx)
-    }
-
-    pub fn current_task_mut(&mut self) -> Option<&mut Box<dyn Task>> {
-        self.tasks.get_mut(self.current_task_idx)
-    }
-
-    pub fn next_task(&mut self) -> Option<&Box<dyn Task>> {
-        if self.current_task_idx + 1 >= self.tasks.len() {
-            if self.repeat {
-                self.current_task_idx = 0;
-            } else {
-                return None;
-            }
-        } else {
-            self.current_task_idx += 1;
-        }
-
-        self.tasks.get(self.current_task_idx)
-    }
 }
