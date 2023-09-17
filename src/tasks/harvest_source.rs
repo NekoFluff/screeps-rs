@@ -40,7 +40,7 @@ impl super::Task for HarvestSourceTask {
         if let Some(source) = self.target.resolve() {
             if creep.pos().is_near_to(source.pos()) {
                 creep.harvest(&source).unwrap_or_else(|e| {
-                    info!("couldn't harvest: {:?}", e);
+                    debug!("couldn't harvest: {:?}", e);
                     cancel(creep.try_id().unwrap());
                 });
             } else {
