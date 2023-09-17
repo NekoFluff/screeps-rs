@@ -565,7 +565,8 @@ impl TaskManager {
         for tower in towers {
             if let StructureObject::StructureTower(tower) = tower {
                 if tower.is_active()
-                    && tower.store().get_free_capacity(Some(ResourceType::Energy)) > 0
+                    && tower.store().get_free_capacity(Some(ResourceType::Energy)) as u32
+                        > tower.store().get_capacity(Some(ResourceType::Energy)) / 2
                 {
                     if let Some(id) = tower.try_id() {
                         tasks.push(allow_withdrawal_from_storage(
@@ -690,7 +691,12 @@ impl TaskManager {
                                         .unwrap()
                                         .store()
                                         .get_free_capacity(Some(ResourceType::Energy))
-                                        > 0
+                                        as u32
+                                        > s.as_has_store()
+                                            .unwrap()
+                                            .store()
+                                            .get_capacity(Some(ResourceType::Energy))
+                                            / 2
                             })
                             .min_by(|a, b| {
                                 storage_link
