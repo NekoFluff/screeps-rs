@@ -4,6 +4,7 @@ pub struct SourceInfo {
     pub non_wall_terrain_count: u32,
     pub nearby_creep_count: u32,
     pub nearby_source_harvester_count: u32,
+    pub has_link: bool,
 }
 
 impl SourceInfo {
@@ -76,10 +77,32 @@ impl SourceInfo {
             })
             .count() as u32;
 
+        let has_link = source
+            .room()
+            .unwrap()
+            .look_at_area(
+                source.pos().y().u8() - 2,
+                source.pos().x().u8() - 2,
+                source.pos().y().u8() + 2,
+                source.pos().x().u8() + 2,
+            )
+            .iter()
+            .filter(|o| {
+                if let LookResult::Structure(structure) = &o.look_result {
+                    if structure.structure_type() == screeps::StructureType::Link {
+                        return true;
+                    }
+                }
+                false
+            })
+            .count()
+            > 0;
+
         SourceInfo {
             non_wall_terrain_count,
             nearby_creep_count,
             nearby_source_harvester_count,
+            has_link,
         }
     }
 }

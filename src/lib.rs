@@ -78,47 +78,20 @@ pub fn game_loop() {
                 .map(|s| metadata::SourceInfo::new(s, None))
                 .collect::<Vec<_>>();
 
-            let controller = room.controller();
-            let link_count = room
-                .find(find::MY_STRUCTURES, None)
+            let target_worker_count = source_infos
                 .iter()
-                .filter(|s| s.structure_type() == StructureType::Link)
-                .count();
+                .map(|s| {
+                    if !s.has_link {
+                        s.non_wall_terrain_count
+                    } else {
+                        0
+                    }
+                })
+                .sum::<u32>()
+                + 2;
 
-            if controller.is_none() || controller.unwrap().level() < 5 || link_count < 2 {
-                spawn_goals.push(SpawnGoal {
-                    name: "worker".to_string(),
-                    body: vec![Part::Move, Part::Move, Part::Carry, Part::Work],
-                    body_upgrades: vec![Part::Move, Part::Carry, Part::Work],
-                    max_body_upgrades: 4,
-                    source_modifier: 0,
-                    count: std::cmp::min(
-                        source_infos
-                            .iter()
-                            .map(|s| s.non_wall_terrain_count)
-                            .sum::<u32>()
-                            + 2,
-                        source_infos.len() as u32 * 4,
-                    ),
-                    is_global: false,
-                });
-            } else {
-                let source_link_count = task_manager
-                    .room_links
-                    .get(&room.name())
-                    .unwrap()
-                    .source_links
-                    .len();
-
-                spawn_goals.push(SpawnGoal {
-                    name: "worker".to_string(),
-                    body: vec![Part::Move, Part::Move, Part::Carry, Part::Work],
-                    body_upgrades: vec![Part::Move, Part::Carry, Part::Work],
-                    max_body_upgrades: 4,
-                    source_modifier: 0,
-                    count: if source_link_count > 1 { 3 } else { 2 },
-                    is_global: false,
-                });
+            if let Some(link_type_map) = task_manager.room_links.get(&room.name()) {
+                let source_link_count = link_type_map.source_links.len();
 
                 spawn_goals.push(SpawnGoal {
                     name: "source_harvester".to_string(),
@@ -147,6 +120,16 @@ pub fn game_loop() {
                     is_global: false,
                 });
             }
+
+            spawn_goals.push(SpawnGoal {
+                name: "worker".to_string(),
+                body: vec![Part::Move, Part::Move, Part::Carry, Part::Work],
+                body_upgrades: vec![Part::Move, Part::Carry, Part::Work],
+                max_body_upgrades: 4,
+                source_modifier: 0,
+                count: std::cmp::min(target_worker_count, source_infos.len() as u32 * 4),
+                is_global: false,
+            });
 
             spawn_goals.push(SpawnGoal {
                 name: "melee".to_string(),
