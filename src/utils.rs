@@ -55,10 +55,10 @@ pub fn log_cpu_usage(str: &str) {
     let cpu = screeps::game::cpu::get_used();
     let cpu_used_since_last_call = cpu - super::LAST_CPU_USAGE.with(|l| *l.borrow());
     trace!(
-        "{}: [{} USED SINCE LAST CALL] [CPU USAGE {}]",
-        str,
+        "[{:.4} CPU DIFF | TOTAL {:.2}]: {}",
         cpu_used_since_last_call,
-        cpu
+        cpu,
+        str
     );
     super::LAST_CPU_USAGE.with(|l| *l.borrow_mut() = cpu);
 }
