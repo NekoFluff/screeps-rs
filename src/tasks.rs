@@ -1058,16 +1058,16 @@ impl TaskManager {
                 });
 
                 if let Some(source) = sources.first() {
-                    let creep_type = get_creep_type(creep);
-                    let source_links = utils::get_source_links(&room);
+                    let harvest_task = Box::new(HarvestSourceTask::new(source.id()));
 
-                    // transfer to closest source link and repeat if the creep is a source harvester
-                    if creep_type == "source_harvester" {
-                        if let Some((StructureObject::StructureLink(source_link), source)) =
-                            source_links
-                                .iter()
-                                .filter(|(link, _source)| creep.pos().get_range_to(link.pos()) <= 2)
-                                .min_by_key(|(link, _source)| creep.pos().get_range_to(link.pos()))
+                    // transfer to closest source link
+                    if link_required {
+                        let source_links = utils::get_source_links(&room);
+
+                        if let Some((StructureObject::StructureLink(source_link), _)) = source_links
+                            .iter()
+                            .filter(|(_link, tmp_source)| tmp_source.pos() == source.pos())
+                            .last()
                         {
                             let harvest_task = Box::new(HarvestSourceTask::new(source.id()));
                             let transfer_task = Box::new(TransferTask::new(source_link.id()));
@@ -1087,8 +1087,6 @@ impl TaskManager {
                             ));
                         }
                     }
-
-                    let harvest_task = Box::new(HarvestSourceTask::new(source.id()));
                     return Some(TaskList::new(vec![harvest_task], false));
                 } else {
                     // There are no sources to gather from and the creep has no energy
