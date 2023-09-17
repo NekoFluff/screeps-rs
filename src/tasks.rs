@@ -426,6 +426,7 @@ impl TaskManager {
                 self.set_task_list(&creep, task);
                 continue;
             }
+            utils::log_cpu_usage("assign tasks - creep loop - flag tasks");
 
             if let Some(room_tasks) = room_tasks_map.get_mut(&current_room.name()) {
                 if let Some(task) = self.get_task_list_for_creep(&creep, room_tasks) {
@@ -433,6 +434,7 @@ impl TaskManager {
                     continue;
                 }
             }
+            utils::log_cpu_usage("assign tasks - creep loop - room tasks");
 
             for (room_name, room_tasks) in room_tasks_map.iter_mut() {
                 if room_name == &current_room.name() {
@@ -461,13 +463,25 @@ impl TaskManager {
                 }
             }
 
+            utils::log_cpu_usage("assign tasks - creep loop - other toom tasks");
+
             if let Some(task) = self.get_default_task_list_for_creep(&creep) {
                 self.set_task_list(&creep, task)
             }
+
+            utils::log_cpu_usage("assign tasks - creep loop - default task");
         }
 
         self.recalculate_working_creeps_by_room_and_type();
+
+        utils::log_cpu_usage(
+            "assign tasks - creep loop - recalculate working creeps by room and type",
+        );
+
         self.recalculate_working_creeps_by_room_and_pos();
+        utils::log_cpu_usage(
+            "assign tasks - creep loop - recalculate working creeps by room and pos",
+        );
 
         flag_task_lists
     }
