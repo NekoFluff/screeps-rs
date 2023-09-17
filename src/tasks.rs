@@ -346,15 +346,15 @@ impl TaskManager {
             }
         }
         for completed_task in completed_tasks.borrow().iter() {
-            // info!(
-            //     "{} completed {:?}",
-            //     game::get_object_by_id_typed(completed_task).unwrap().name(),
-            //     self.tasks
-            //         .get(completed_task)
-            //         .unwrap()
-            //         .current_task()
-            //         .unwrap(),
-            // );
+            info!(
+                "{} completed {:?}",
+                game::get_object_by_id_typed(completed_task).unwrap().name(),
+                self.tasks
+                    .get(completed_task)
+                    .unwrap()
+                    .current_task()
+                    .unwrap(),
+            );
 
             if self
                 .tasks
@@ -367,15 +367,15 @@ impl TaskManager {
             }
         }
         for cancelled_task in cancelled_tasks.borrow().iter() {
-            // info!(
-            //     "{} did not successfully complete {:?}",
-            //     game::get_object_by_id_typed(cancelled_task).unwrap().name(),
-            //     self.tasks
-            //         .get(cancelled_task)
-            //         .unwrap()
-            //         .current_task()
-            //         .unwrap(),
-            // );
+            info!(
+                "{} did not successfully complete {:?}",
+                game::get_object_by_id_typed(cancelled_task).unwrap().name(),
+                self.tasks
+                    .get(cancelled_task)
+                    .unwrap()
+                    .current_task()
+                    .unwrap(),
+            );
             if self
                 .tasks
                 .get_mut(cancelled_task)
