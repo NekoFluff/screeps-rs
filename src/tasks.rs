@@ -942,7 +942,24 @@ impl TaskManager {
                 if let Some(controller) = creep.room().unwrap().controller() {
                     let upgrade_task = Box::new(UpgradeTask::new(controller.id()));
                     let withdraw_task = Box::new(WithdrawTask::new(link.try_id().unwrap()));
-                    return Some(TaskList::new(vec![withdraw_task, upgrade_task], true));
+                    let idle_until_task = Box::new(IdleUntilTask::new(
+                        Box::new(|_, link: Option<ObjectId<StructureLink>>| {
+                            if let Some(link) = link {
+                                link.resolve()
+                                    .unwrap()
+                                    .store()
+                                    .get_used_capacity(Some(ResourceType::Energy))
+                                    > 0
+                            } else {
+                                false
+                            }
+                        }),
+                        Some(link.try_id().unwrap()),
+                    ));
+                    return Some(TaskList::new(
+                        vec![withdraw_task, upgrade_task, idle_until_task],
+                        true,
+                    ));
                 }
             }
 
