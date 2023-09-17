@@ -5,6 +5,8 @@ use screeps::{
     StructureObject, StructureProperties, StructureType,
 };
 
+use log::*;
+
 pub fn get_creep_type(creep: &Creep) -> String {
     creep
         .name()
@@ -47,4 +49,14 @@ pub fn pause_script() {
         *p.borrow_mut() = true;
     });
     panic!("Paused script");
+}
+
+pub fn log_cpu_usage(str: &str) {
+    let cpu = screeps::game::cpu::get_used();
+    let cpu_used_since_last_call = cpu - super::LAST_CPU_USAGE.with(|l| *l.borrow());
+    debug!(
+        "{}: [{} USED SINCE LAST CALL] [CPU USAGE {}]",
+        str, cpu_used_since_last_call, cpu
+    );
+    super::LAST_CPU_USAGE.with(|l| *l.borrow_mut() = cpu);
 }

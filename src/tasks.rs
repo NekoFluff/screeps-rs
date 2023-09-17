@@ -404,10 +404,15 @@ impl TaskManager {
 
     pub fn assign_tasks(&mut self) -> Vec<TaskList> {
         let idle_creeps = self.get_idle_creeps();
+        // utils::log_cpu_usage("assign tasks - get idle creeps");
+
         let mut flag_task_lists = self.get_flag_task_lists();
+        // utils::log_cpu_usage("assign tasks - get flag tasks");
+
         let mut room_tasks_map = HashMap::new();
         for room in game::rooms().values() {
             room_tasks_map.insert(room.name(), self.get_room_task_lists(room));
+            // utils::log_cpu_usage("assign tasks - get room tasks");
         }
 
         'creep_loop: for creep in idle_creeps {
@@ -577,8 +582,11 @@ impl TaskManager {
         let mut tasks: Vec<TaskList> = Vec::new();
 
         let structures = room.find(find::STRUCTURES, None);
+        let my_structures = room.find(find::MY_STRUCTURES, None);
         let construction_sites = room.find(find::CONSTRUCTION_SITES, None);
         let enemy_creeps = room.find(find::HOSTILE_CREEPS, None);
+
+        // utils::log_cpu_usage("get room task lists - get data");
 
         // attack
         if !enemy_creeps.is_empty() {
@@ -608,7 +616,7 @@ impl TaskManager {
         }
 
         // towers
-        let towers = structures
+        let towers = my_structures
             .iter()
             .filter(|s| s.structure_type() == StructureType::Tower);
         for tower in towers {
@@ -627,19 +635,19 @@ impl TaskManager {
             }
         }
 
+        // utils::log_cpu_usage("get room task lists - tower tasks");
+
         // extensions
-        let extensions = structures
+        let extensions = my_structures
             .iter()
             .filter(|s| s.structure_type() == StructureType::Extension);
         let mut extension_transfer_tasks_exist = false;
         for extension in extensions {
             if let StructureObject::StructureExtension(extension) = extension {
-                if extension.is_active()
-                    && extension
-                        .store()
-                        .get_free_capacity(Some(ResourceType::Energy))
-                        > 0
-                    && extension.my()
+                if extension
+                    .store()
+                    .get_free_capacity(Some(ResourceType::Energy))
+                    > 0
                 {
                     if self.is_pos_being_worked_on(&room.name(), &extension.pos(), 1) {
                         continue;
@@ -651,13 +659,16 @@ impl TaskManager {
                         tasks.push(allow_withdrawal_from_storage(&room, transfer_task));
 
                         extension_transfer_tasks_exist = true;
+                        break;
                     }
                 }
             }
         }
 
+        // utils::log_cpu_usage("get room task lists - extension tasks");
+
         // spawn
-        let spawns = structures
+        let spawns = my_structures
             .iter()
             .filter(|s| s.structure_type() == StructureType::Spawn);
 
@@ -674,6 +685,8 @@ impl TaskManager {
                 }
             }
         }
+
+        // utils::log_cpu_usage("get room task lists - spawn tasks");
 
         // transfer energy from link to controller
         for controller_link in self
@@ -711,6 +724,8 @@ impl TaskManager {
             }
         }
 
+        // utils::log_cpu_usage("get room task lists - link to controller tasks");
+
         // transfer energy from link to storage
         for storage_link in self
             .room_links
@@ -731,7 +746,7 @@ impl TaskManager {
                 {
                     if let Some(id) = storage_link.try_id() {
                         // get storage closest to link
-                        let storage = structures
+                        let storage = my_structures
                             .iter()
                             .filter(|s| {
                                 s.structure_type() == StructureType::Storage
@@ -770,6 +785,8 @@ impl TaskManager {
             }
         }
 
+        // utils::log_cpu_usage("get room task lists - link to storage tasks");
+
         // healing
         // if creep.hits() < creep.hits_max() {
         //     info!("{} needs healing", creep.name());
@@ -786,6 +803,8 @@ impl TaskManager {
                 ));
             }
         }
+
+        // utils::log_cpu_usage("get room task lists - construction sites");
 
         // repair
         let mut repair_task_count = 0;
@@ -828,6 +847,8 @@ impl TaskManager {
                 }
             }
         }
+
+        // utils::log_cpu_usage("get room task lists - repair tasks");
 
         tasks
     }

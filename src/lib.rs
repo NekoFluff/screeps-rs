@@ -17,7 +17,7 @@ mod utils;
 // add wasm_bindgen to any function you would like to expose for call from js
 #[wasm_bindgen]
 pub fn setup() {
-    logging::setup_logging(logging::Info);
+    logging::setup_logging(logging::Trace);
 }
 
 // this is one way to persist data between ticks within Rust's memory, as opposed to
@@ -26,6 +26,7 @@ thread_local! {
     static TASK_MANAGER: RefCell<TaskManager> = RefCell::new(TaskManager::new());
     static SOURCE_DATA: RefCell<Vec<metadata::SourceInfo>> = RefCell::new(Vec::new());
     static PAUSE_SCRIPT: RefCell<bool> = RefCell::new(false);
+    static LAST_CPU_USAGE: RefCell<f64> = RefCell::new(0_f64);
 }
 
 // to use a reserved name as a function name, use `js_name`:
@@ -35,6 +36,9 @@ pub fn game_loop() {
     if pause {
         return;
     }
+    LAST_CPU_USAGE.with(|l| {
+        *l.borrow_mut() = screeps::game::cpu::get_used();
+    });
 
     debug!(
         "loop starting! CPU: {}. Peak Malloc: {}. Total Memory: {}",
@@ -45,16 +49,22 @@ pub fn game_loop() {
 
     TASK_MANAGER.with(|task_manager_refcell| {
         let rooms = game::rooms().values();
+        // utils::log_cpu_usage("get rooms");
 
         for room in rooms {
             execute_towers(&room);
+            // utils::log_cpu_usage("execute towers");
         }
 
         let mut task_manager = task_manager_refcell.borrow_mut();
         task_manager.clean_up_tasks();
+        // utils::log_cpu_usage("clean up tasks");
         task_manager.classify_links();
+        // utils::log_cpu_usage("classify links");
         let flag_tasks_lists = task_manager.assign_tasks();
+        // utils::log_cpu_usage("assign tasks");
         task_manager.execute_tasks();
+        // utils::log_cpu_usage("execute tasks");
 
         let claim_task_exists = flag_tasks_lists.iter().any(|t| {
             if let Some(task) = t.current_task() {
@@ -211,7 +221,9 @@ pub fn game_loop() {
 
             // info!("spawn goals for room {}: {:?}", room_name, spawn_goals);
         }
+        // utils::log_cpu_usage("calculate spawn goals");
         SpawnManager::new(room_spawn_goals).spawn_creeps();
+        // utils::log_cpu_usage("spawn creeps");
     });
 
     info!(
