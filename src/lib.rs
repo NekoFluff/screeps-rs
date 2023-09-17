@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use log::*;
 use screeps::{constants::Part, enums::StructureObject, find, game};
-use screeps::{HasPosition, Room, RoomName, StructureProperties, StructureType};
+use screeps::{HasPosition, ResourceType, Room, RoomName, StructureProperties, StructureType};
 use spawn::{SpawnGoal, SpawnGoals, SpawnManager};
 use tasks::TaskManager;
 use wasm_bindgen::prelude::*;
@@ -151,6 +151,16 @@ pub fn game_loop() {
             });
 
             let controller_link_count = link_type_map.controller_links.len();
+            let controller_link_energy = link_type_map
+                .controller_links
+                .iter()
+                .map(|l| {
+                    l.as_has_store()
+                        .unwrap()
+                        .store()
+                        .get_used_capacity(Some(ResourceType::Energy))
+                })
+                .sum::<u32>();
             let source_link_count = link_type_map.source_links.len();
 
             let mut body = vec![
@@ -181,7 +191,7 @@ pub fn game_loop() {
                 body_upgrades: vec![],
                 max_body_upgrades: 0,
                 source_modifier: 0,
-                count: if source_link_count > 0 {
+                count: if source_link_count > 0 && controller_link_energy > 400 {
                     controller_link_count as u32
                 } else {
                     0
