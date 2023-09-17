@@ -404,15 +404,15 @@ impl TaskManager {
 
     pub fn assign_tasks(&mut self) -> Vec<TaskList> {
         let idle_creeps = self.get_idle_creeps();
-        // utils::log_cpu_usage("assign tasks - get idle creeps");
+        utils::log_cpu_usage("assign tasks - get idle creeps");
 
         let mut flag_task_lists = self.get_flag_task_lists();
-        // utils::log_cpu_usage("assign tasks - get flag tasks");
+        utils::log_cpu_usage("assign tasks - get flag tasks");
 
         let mut room_tasks_map = HashMap::new();
         for room in game::rooms().values() {
             room_tasks_map.insert(room.name(), self.get_room_task_lists(room));
-            // utils::log_cpu_usage("assign tasks - get room tasks");
+            utils::log_cpu_usage("assign tasks - get room tasks");
         }
 
         'creep_loop: for creep in idle_creeps {
@@ -586,7 +586,7 @@ impl TaskManager {
         let construction_sites = room.find(find::CONSTRUCTION_SITES, None);
         let enemy_creeps = room.find(find::HOSTILE_CREEPS, None);
 
-        // utils::log_cpu_usage("get room task lists - get data");
+        utils::log_cpu_usage("get room task lists - get data");
 
         // attack
         if !enemy_creeps.is_empty() {
@@ -635,7 +635,7 @@ impl TaskManager {
             }
         }
 
-        // utils::log_cpu_usage("get room task lists - tower tasks");
+        utils::log_cpu_usage("get room task lists - tower tasks");
 
         // extensions
         let extensions = my_structures
@@ -665,7 +665,7 @@ impl TaskManager {
             }
         }
 
-        // utils::log_cpu_usage("get room task lists - extension tasks");
+        utils::log_cpu_usage("get room task lists - extension tasks");
 
         // spawn
         let spawns = my_structures
@@ -686,7 +686,7 @@ impl TaskManager {
             }
         }
 
-        // utils::log_cpu_usage("get room task lists - spawn tasks");
+        utils::log_cpu_usage("get room task lists - spawn tasks");
 
         // transfer energy from link to controller
         for controller_link in self
@@ -724,7 +724,7 @@ impl TaskManager {
             }
         }
 
-        // utils::log_cpu_usage("get room task lists - link to controller tasks");
+        utils::log_cpu_usage("get room task lists - link to controller tasks");
 
         // transfer energy from link to storage
         for storage_link in self
@@ -785,7 +785,7 @@ impl TaskManager {
             }
         }
 
-        // utils::log_cpu_usage("get room task lists - link to storage tasks");
+        utils::log_cpu_usage("get room task lists - link to storage tasks");
 
         // healing
         // if creep.hits() < creep.hits_max() {
@@ -804,7 +804,7 @@ impl TaskManager {
             }
         }
 
-        // utils::log_cpu_usage("get room task lists - construction sites");
+        utils::log_cpu_usage("get room task lists - construction sites");
 
         // repair
         let mut repair_task_count = 0;
@@ -848,7 +848,7 @@ impl TaskManager {
             }
         }
 
-        // utils::log_cpu_usage("get room task lists - repair tasks");
+        utils::log_cpu_usage("get room task lists - repair tasks");
 
         tasks
     }

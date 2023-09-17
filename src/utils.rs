@@ -54,9 +54,11 @@ pub fn pause_script() {
 pub fn log_cpu_usage(str: &str) {
     let cpu = screeps::game::cpu::get_used();
     let cpu_used_since_last_call = cpu - super::LAST_CPU_USAGE.with(|l| *l.borrow());
-    debug!(
+    trace!(
         "{}: [{} USED SINCE LAST CALL] [CPU USAGE {}]",
-        str, cpu_used_since_last_call, cpu
+        str,
+        cpu_used_since_last_call,
+        cpu
     );
     super::LAST_CPU_USAGE.with(|l| *l.borrow_mut() = cpu);
 }

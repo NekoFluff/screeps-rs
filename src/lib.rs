@@ -49,22 +49,22 @@ pub fn game_loop() {
 
     TASK_MANAGER.with(|task_manager_refcell| {
         let rooms = game::rooms().values();
-        // utils::log_cpu_usage("get rooms");
+        utils::log_cpu_usage("get rooms");
 
         for room in rooms {
             execute_towers(&room);
-            // utils::log_cpu_usage("execute towers");
+            utils::log_cpu_usage("execute towers");
         }
 
         let mut task_manager = task_manager_refcell.borrow_mut();
         task_manager.clean_up_tasks();
-        // utils::log_cpu_usage("clean up tasks");
+        utils::log_cpu_usage("clean up tasks");
         task_manager.classify_links();
-        // utils::log_cpu_usage("classify links");
+        utils::log_cpu_usage("classify links");
         let flag_tasks_lists = task_manager.assign_tasks();
-        // utils::log_cpu_usage("assign tasks");
+        utils::log_cpu_usage("assign tasks");
         task_manager.execute_tasks();
-        // utils::log_cpu_usage("execute tasks");
+        utils::log_cpu_usage("execute tasks");
 
         let claim_task_exists = flag_tasks_lists.iter().any(|t| {
             if let Some(task) = t.current_task() {
@@ -221,9 +221,9 @@ pub fn game_loop() {
 
             // info!("spawn goals for room {}: {:?}", room_name, spawn_goals);
         }
-        // utils::log_cpu_usage("calculate spawn goals");
+        utils::log_cpu_usage("calculate spawn goals");
         SpawnManager::new(room_spawn_goals).spawn_creeps();
-        // utils::log_cpu_usage("spawn creeps");
+        utils::log_cpu_usage("spawn creeps");
     });
 
     info!(
