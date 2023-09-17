@@ -37,8 +37,10 @@ use crate::{
 };
 use wasm_bindgen::JsValue;
 
+type TaskMap = HashMap<ObjectId<Creep>, TaskList>;
+
 pub struct TaskManager {
-    pub tasks: HashMap<ObjectId<Creep>, Box<dyn Task>>,
+    pub tasks: TaskMap,
     working_creeps_by_room_and_type: HashMap<RoomName, HashMap<String, u32>>,
     working_creeps_by_room_and_pos: HashMap<RoomName, HashMap<Position, u32>>,
     pub room_links: HashMap<RoomName, LinkTypeMap>,
@@ -180,7 +182,7 @@ impl TaskManager {
                             }
                         }
 
-                        info!("link idle, no storage or controller links available");
+                        // info!("link idle, no storage or controller links available");
                     }
                 }
             }
@@ -203,62 +205,73 @@ impl TaskManager {
 
     fn recalculate_working_creeps_by_room_and_type(&mut self) {
         let tasks = self.tasks.iter();
-        self.working_creeps_by_room_and_type =
-            tasks.fold(HashMap::new(), |mut acc, (creep_id, task)| {
-                let creep = game::get_object_by_id_typed(creep_id);
-                if creep.is_none() {
-                    return acc;
-                }
+        self.working_creeps_by_room_and_type = HashMap::new();
 
-                let creep = creep.unwrap();
-                let creep_type = get_creep_type(&creep);
-                if creep_type == "attacker" || creep_type == "healer" {
-                    return acc;
-                }
+        for (creep_id, task_list) in self.tasks.iter_mut() {
+            let creep = game::get_object_by_id_typed(creep_id);
+            if creep.is_none() {
+                continue;
+            }
+
+            let creep = creep.unwrap();
+            let creep_type = get_creep_type(&creep);
+            if creep_type == "attacker" || creep_type == "healer" {
+                continue;
+            }
+
+            if let Some(task) = task_list.current_task() {
                 let room_name = task
                     .get_target_pos()
                     .map(|p| p.room_name())
                     .unwrap_or(creep.room().unwrap().name());
 
-                let count: &mut HashMap<String, u32> = acc.entry(room_name).or_default();
+                let count: &mut HashMap<String, u32> = self
+                    .working_creeps_by_room_and_type
+                    .entry(room_name)
+                    .or_default();
                 let creep_count = count.entry(creep_type).or_insert(0);
                 *creep_count += 1;
-                acc
-            });
+            }
+        }
     }
 
     fn recalculate_working_creeps_by_room_and_pos(&mut self) {
         let tasks = self.tasks.iter();
-        self.working_creeps_by_room_and_pos =
-            tasks.fold(HashMap::new(), |mut acc, (creep_id, task)| {
-                let creep = game::get_object_by_id_typed(creep_id);
-                if creep.is_none() {
-                    return acc;
-                }
+        self.working_creeps_by_room_and_pos = HashMap::new();
 
-                let creep: Creep = creep.unwrap();
-                let creep_type = get_creep_type(&creep);
-                if creep_type == "attacker" || creep_type == "healer" {
-                    return acc;
-                }
+        for (creep_id, task_list) in self.tasks.iter_mut() {
+            let creep = game::get_object_by_id_typed(creep_id);
+            if creep.is_none() {
+                continue;
+            }
 
+            let creep: Creep = creep.unwrap();
+            let creep_type = get_creep_type(&creep);
+            if creep_type == "attacker" || creep_type == "healer" {
+                continue;
+            }
+
+            if let Some(task) = task_list.current_task() {
                 let room_name = task
                     .get_target_pos()
                     .map(|p| p.room_name())
                     .unwrap_or(creep.room().unwrap().name());
 
                 if let Some(target_pos) = task.get_target_pos() {
-                    let count: &mut HashMap<Position, u32> = acc.entry(room_name).or_default();
+                    let count: &mut HashMap<Position, u32> = self
+                        .working_creeps_by_room_and_pos
+                        .entry(room_name)
+                        .or_default();
                     let creep_count = count.entry(target_pos).or_insert(0);
                     *creep_count += 1;
                 }
-
-                acc
-            });
+            }
+        }
     }
 
-    pub fn add_task(&mut self, creep: &Creep, task: Box<dyn Task>) {
+    pub fn set_task_list(&mut self, creep: &Creep, mut task_list: TaskList) {
         if let Some(creep_id) = creep.try_id() {
+            let task = task_list.current_task().unwrap();
             info!(
                 "{} was assigned to {:?} at {:?}",
                 creep.name(),
@@ -304,68 +317,94 @@ impl TaskManager {
                 }
             }
 
-            self.tasks.insert(creep_id, task);
+            self.tasks.insert(creep_id, task_list);
         }
     }
 
     pub fn execute_tasks(&mut self) {
         self.execute_links();
 
-        type TaskMap = HashMap<ObjectId<Creep>, Box<dyn Task>>;
-
         let completed_tasks = Rc::new(RefCell::new(Vec::new()));
         let cancelled_tasks = Rc::new(RefCell::new(Vec::new()));
         let switch_tasks: Rc<RefCell<TaskMap>> = Rc::new(RefCell::new(HashMap::new()));
 
-        for (creep_id, task) in self.tasks.iter_mut() {
+        for (creep_id, task_list) in self.tasks.iter_mut() {
             if let Some(creep) = game::get_object_by_id_typed(creep_id) {
                 let completed_tasks_clone = completed_tasks.clone();
                 let cancelled_tasks_clone = cancelled_tasks.clone();
                 let switch_tasks_clone = switch_tasks.clone();
-                task.execute(
-                    &creep,
-                    Box::new(move |creep_id| completed_tasks_clone.borrow_mut().push(creep_id)),
-                    Box::new(move |creep_id| cancelled_tasks_clone.borrow_mut().push(creep_id)),
-                    Box::new(move |creep_id, task| {
-                        switch_tasks_clone.borrow_mut().insert(creep_id, task);
-                    }),
-                );
+                if let Some(task) = task_list.current_task_mut() {
+                    task.execute(
+                        &creep,
+                        Box::new(move |creep_id| completed_tasks_clone.borrow_mut().push(creep_id)),
+                        Box::new(move |creep_id| cancelled_tasks_clone.borrow_mut().push(creep_id)),
+                        Box::new(move |creep_id, task| {
+                            switch_tasks_clone.borrow_mut().insert(creep_id, task);
+                        }),
+                    );
+                }
             }
         }
         for completed_task in completed_tasks.borrow().iter() {
-            info!(
-                "{} completed {:?}",
-                game::get_object_by_id_typed(completed_task).unwrap().name(),
-                self.tasks.get(completed_task).unwrap()
-            );
-            self.tasks.remove(completed_task);
+            // info!(
+            //     "{} completed {:?}",
+            //     game::get_object_by_id_typed(completed_task).unwrap().name(),
+            //     self.tasks
+            //         .get(completed_task)
+            //         .unwrap()
+            //         .current_task()
+            //         .unwrap(),
+            // );
+
+            if self
+                .tasks
+                .get_mut(completed_task)
+                .unwrap()
+                .next_task()
+                .is_none()
+            {
+                self.tasks.remove(completed_task);
+            }
         }
         for cancelled_task in cancelled_tasks.borrow().iter() {
-            info!(
-                "{} did not successfully complete {:?}",
-                game::get_object_by_id_typed(cancelled_task).unwrap().name(),
-                self.tasks.get(cancelled_task).unwrap()
-            );
-            self.tasks.remove(cancelled_task);
+            // info!(
+            //     "{} did not successfully complete {:?}",
+            //     game::get_object_by_id_typed(cancelled_task).unwrap().name(),
+            //     self.tasks
+            //         .get(cancelled_task)
+            //         .unwrap()
+            //         .current_task()
+            //         .unwrap(),
+            // );
+            if self
+                .tasks
+                .get_mut(cancelled_task)
+                .unwrap()
+                .next_task()
+                .is_none()
+            {
+                self.tasks.remove(cancelled_task);
+            }
         }
-        for (creep_id, task) in switch_tasks.borrow_mut().drain() {
+        for (creep_id, task_list) in switch_tasks.borrow_mut().drain() {
+            let task = task_list.current_task().unwrap();
             info!(
-                "{}'s task was switched to {:?}",
+                "{}'s task list was switched to {:?}",
                 creep_id.resolve().unwrap().name(),
                 task
             );
             if let Some(creep) = game::get_object_by_id_typed(&creep_id) {
-                self.add_task(&creep, task);
+                self.set_task_list(&creep, task_list);
             }
         }
     }
 
-    pub fn assign_tasks(&mut self) -> Vec<Box<dyn Task>> {
+    pub fn assign_tasks(&mut self) -> Vec<TaskList> {
         let idle_creeps = self.get_idle_creeps();
-        let mut flag_tasks = self.get_flag_tasks();
+        let mut flag_task_lists = self.get_flag_task_lists();
         let mut room_tasks_map = HashMap::new();
         for room in game::rooms().values() {
-            room_tasks_map.insert(room.name(), self.get_room_tasks(room));
+            room_tasks_map.insert(room.name(), self.get_room_task_lists(room));
         }
 
         'creep_loop: for creep in idle_creeps {
@@ -375,14 +414,14 @@ impl TaskManager {
             }
             let current_room = current_room.unwrap();
 
-            if let Some(task) = self.get_task_for_creep(&creep, &mut flag_tasks) {
-                self.add_task(&creep, task);
+            if let Some(task) = self.get_task_list_for_creep(&creep, &mut flag_task_lists) {
+                self.set_task_list(&creep, task);
                 continue;
             }
 
             if let Some(room_tasks) = room_tasks_map.get_mut(&current_room.name()) {
-                if let Some(task) = self.get_task_for_creep(&creep, room_tasks) {
-                    self.add_task(&creep, task);
+                if let Some(task) = self.get_task_list_for_creep(&creep, room_tasks) {
+                    self.set_task_list(&creep, task);
                     continue;
                 }
             }
@@ -408,32 +447,33 @@ impl TaskManager {
                     }
                 }
 
-                if let Some(task) = self.get_task_for_creep(&creep, room_tasks) {
-                    self.add_task(&creep, task);
+                if let Some(task) = self.get_task_list_for_creep(&creep, room_tasks) {
+                    self.set_task_list(&creep, task);
                     continue 'creep_loop;
                 }
             }
 
-            if let Some(task) = self.get_default_task_for_creep(&creep) {
-                self.add_task(&creep, task)
+            if let Some(task) = self.get_default_task_list_for_creep(&creep) {
+                self.set_task_list(&creep, task)
             }
         }
 
         self.recalculate_working_creeps_by_room_and_type();
         self.recalculate_working_creeps_by_room_and_pos();
 
-        flag_tasks
+        flag_task_lists
     }
 
     /// Returns the most appropriate task for the creep based on its body parts (if one exists)
-    fn get_task_for_creep(
+    fn get_task_list_for_creep(
         &self,
         creep: &Creep,
-        task_list: &mut Vec<Box<dyn Task>>,
-    ) -> Option<Box<dyn Task>> {
+        task_lists: &mut Vec<TaskList>,
+    ) -> Option<TaskList> {
         // (index, task)
         let mut similar_tasks: Vec<(usize, &Box<dyn Task>)> = vec![];
-        for (index, task) in task_list.iter().enumerate() {
+        for (index, task_list) in task_lists.iter().enumerate() {
+            let task = task_list.current_task().unwrap();
             if similar_tasks.is_empty() && can_creep_handle_task(creep, &**task) {
                 if task.requires_energy()
                     && creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0
@@ -458,7 +498,7 @@ impl TaskManager {
         }
 
         if similar_tasks.len() == 1 {
-            return Some(task_list.remove(similar_tasks.get(0).unwrap().0));
+            return Some(task_lists.remove(similar_tasks.get(0).unwrap().0));
         }
 
         // (index, distance to target)
@@ -482,11 +522,11 @@ impl TaskManager {
 
         let shortest_distance_idx = tasks_by_value.first().unwrap().0;
 
-        Some(task_list.remove(shortest_distance_idx))
+        Some(task_lists.remove(shortest_distance_idx))
     }
 
-    fn get_flag_tasks(&self) -> Vec<Box<dyn Task>> {
-        let mut tasks: Vec<Box<dyn Task>> = Vec::new();
+    fn get_flag_task_lists(&self) -> Vec<TaskList> {
+        let mut task_lists: Vec<TaskList> = Vec::new();
         let flags = game::flags().values();
 
         for flag in flags {
@@ -511,7 +551,8 @@ impl TaskManager {
                     }
 
                     let room_pos = RoomPosition::new(25, 25, room_name);
-                    tasks.push(Box::new(ClaimTask::new(room_pos)));
+                    let task = Box::new(ClaimTask::new(room_pos));
+                    task_lists.push(TaskList::new(vec![task], false));
                 } else {
                     error!("invalid room name: {}", room_name);
                     flag.remove();
@@ -519,10 +560,10 @@ impl TaskManager {
             }
         }
 
-        tasks
+        task_lists
     }
 
-    fn get_room_tasks(&self, room: Room) -> Vec<Box<dyn Task>> {
+    fn get_room_task_lists(&self, room: Room) -> Vec<TaskList> {
         let controller = room.controller();
         if controller.is_none() {
             return Vec::new();
@@ -530,7 +571,7 @@ impl TaskManager {
 
         let controller = controller.unwrap();
 
-        let mut tasks: Vec<Box<dyn Task>> = Vec::new();
+        let mut tasks: Vec<TaskList> = Vec::new();
 
         let structures = room.find(find::STRUCTURES, None);
         let my_structures = room.find(find::MY_STRUCTURES, None);
@@ -541,8 +582,8 @@ impl TaskManager {
         if !enemy_creeps.is_empty() {
             for enemy_creep in enemy_creeps {
                 if let Some(id) = enemy_creep.try_id() {
-                    tasks.push(Box::new(AttackTask::new(id)));
-                    tasks.push(Box::new(AttackTask::new(id)));
+                    tasks.push(TaskList::new(vec![Box::new(AttackTask::new(id))], false));
+                    tasks.push(TaskList::new(vec![Box::new(AttackTask::new(id))], false));
                 }
             }
         }
@@ -550,11 +591,17 @@ impl TaskManager {
         // controller: if the downgrade time is less than 10000 ticks, upgrade
         if controller.my() && controller.is_active() {
             if controller.ticks_to_downgrade() < 9000 {
-                tasks.push(Box::new(UpgradeTask::new(controller.id())));
+                tasks.push(TaskList::new(
+                    vec![Box::new(UpgradeTask::new(controller.id()))],
+                    false,
+                ));
             }
 
             if controller.level() < 2 {
-                tasks.push(Box::new(UpgradeTask::new(controller.id())));
+                tasks.push(TaskList::new(
+                    vec![Box::new(UpgradeTask::new(controller.id()))],
+                    false,
+                ));
             }
         }
 
@@ -571,7 +618,7 @@ impl TaskManager {
                     if let Some(id) = tower.try_id() {
                         tasks.push(allow_withdrawal_from_storage(
                             &room,
-                            Box::new(TransferTask::new(id, None)),
+                            Box::new(TransferTask::new(id)),
                         ));
                     }
                 }
@@ -597,7 +644,7 @@ impl TaskManager {
                     }
 
                     if let Some(id) = extension.try_id() {
-                        let transfer_task = Box::new(TransferTask::new(id, None));
+                        let transfer_task = Box::new(TransferTask::new(id));
 
                         tasks.push(allow_withdrawal_from_storage(&room, transfer_task));
 
@@ -618,7 +665,7 @@ impl TaskManager {
                     && spawn.store().get_free_capacity(Some(ResourceType::Energy)) > 0
                 {
                     if let Some(id) = spawn.try_id() {
-                        let transfer_task = Box::new(TransferTask::new(id, None));
+                        let transfer_task = Box::new(TransferTask::new(id));
 
                         tasks.push(allow_withdrawal_from_storage(&room, transfer_task));
                     }
@@ -654,9 +701,9 @@ impl TaskManager {
                     && controller_link.pos().in_range_to(controller.pos(), 2)
                 {
                     if let Some(id) = controller_link.try_id() {
-                        // let upgrade_task = Box::new(UpgradeTask::new(controller.id()));
-
-                        tasks.push(Box::new(WithdrawTask::new(id, Some(controller.id()), None)));
+                        let upgrade_task = Box::new(UpgradeTask::new(controller.id()));
+                        let withdraw_task = Box::new(WithdrawTask::new(id));
+                        tasks.push(TaskList::new(vec![withdraw_task, upgrade_task], false));
                     }
                 }
             }
@@ -707,15 +754,13 @@ impl TaskManager {
 
                         if let Some(storage) = storage {
                             if let StructureObject::StructureStorage(storage) = storage {
-                                let transfer_task = Box::new(TransferTask::new(storage.id(), None));
-
-                                tasks.push(Box::new(WithdrawTask::new(
-                                    id,
-                                    None,
-                                    Some(transfer_task),
-                                )));
+                                let transfer_task = Box::new(TransferTask::new(storage.id()));
+                                let withdraw_task = Box::new(WithdrawTask::new(id));
+                                tasks
+                                    .push(TaskList::new(vec![withdraw_task, transfer_task], false));
                             } else {
-                                tasks.push(Box::new(WithdrawTask::new(id, None, None)));
+                                let withdraw_task = Box::new(WithdrawTask::new(id));
+                                tasks.push(TaskList::new(vec![withdraw_task], false));
                             }
                         }
                     }
@@ -815,12 +860,12 @@ impl TaskManager {
         false
     }
 
-    fn get_default_task_for_creep(&self, creep: &Creep) -> Option<Box<dyn Task>> {
+    fn get_default_task_list_for_creep(&self, creep: &Creep) -> Option<TaskList> {
         let creep_type = get_creep_type(creep);
         let creep_parts = creep.body().iter().map(|p| p.part()).collect::<Vec<Part>>();
 
         if creep_type == "source_harvester" {
-            return self.get_harvest_source_task(creep, false, true);
+            return self.get_harvest_source_task_list(creep, false, true);
         } else if creep_type == "upgrader" {
             let structure = self
                 .room_links
@@ -832,11 +877,9 @@ impl TaskManager {
 
             if let StructureObject::StructureLink(link) = structure {
                 if let Some(controller) = creep.room().unwrap().controller() {
-                    return Some(Box::new(WithdrawTask::new(
-                        link.try_id().unwrap(),
-                        Some(controller.id()),
-                        None,
-                    )));
+                    let upgrade_task = Box::new(UpgradeTask::new(controller.id()));
+                    let withdraw_task = Box::new(WithdrawTask::new(link.try_id().unwrap()));
+                    return Some(TaskList::new(vec![withdraw_task, upgrade_task], true));
                 }
             }
 
@@ -846,7 +889,8 @@ impl TaskManager {
         if creep_parts.contains(&Part::Attack) {
             if let Some(defend_flag) = game::flags().values().find(|f| f.name() == "defend") {
                 if !creep.pos().in_range_to(defend_flag.pos(), 3) {
-                    return Some(Box::new(TravelDumbTask::new(defend_flag.pos())));
+                    let task = Box::new(TravelDumbTask::new(defend_flag.pos()));
+                    return Some(TaskList::new(vec![task], false));
                 } else {
                     return None;
                 }
@@ -854,38 +898,41 @@ impl TaskManager {
 
             let controller = creep.room().unwrap().controller().unwrap();
             if !creep.pos().in_range_to(controller.pos(), 3) {
-                return Some(Box::new(TravelTask::new(controller.id())));
+                let task = Box::new(TravelTask::new(controller.id()));
+                return Some(TaskList::new(vec![task], false));
             }
         } else if creep_parts.contains(&Part::Claim) {
             return None;
         } else if creep_parts.contains(&Part::Work) {
             if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 {
                 let controller = creep.room().unwrap().controller().unwrap();
-                if (controller.my()) {
-                    return Some(Box::new(UpgradeTask::new(
+                if controller.my() {
+                    let task = Box::new(UpgradeTask::new(
                         creep.room().unwrap().controller().unwrap().id(),
-                    )));
-                } else {
-                    return self.get_harvest_source_task(creep, true, false);
+                    ));
+                    return Some(TaskList::new(vec![task], false));
                 }
-            } else {
-                return self.get_harvest_source_task(creep, true, false);
+                return self.get_harvest_source_task_list(creep, true, false);
             }
+
+            return self.get_harvest_source_task_list(creep, true, false);
         }
 
         if !utils::is_mine(&creep.room().unwrap()) {
-            return get_travel_home_task(creep);
+            if let Some(task) = get_travel_home_task(creep) {
+                return Some(TaskList::new(vec![task], false));
+            }
         }
 
         None
     }
 
-    fn get_harvest_source_task(
+    fn get_harvest_source_task_list(
         &self,
         creep: &Creep,
         active_only: bool,
         link_required: bool,
-    ) -> Option<Box<dyn Task>> {
+    ) -> Option<TaskList> {
         // Gather energy
         let room = creep.room().unwrap();
         if let Some(controller) = room.controller() {
@@ -948,7 +995,26 @@ impl TaskManager {
                 });
 
                 if let Some(source) = sources.first() {
-                    return Some(Box::new(HarvestSourceTask::new(source.id())));
+                    let creep_type = get_creep_type(creep);
+                    let source_links = utils::get_source_links(&room);
+
+                    // transfer to closest source link and repeat if the creep is a source harvester
+                    if creep_type == "source_harvester" {
+                        if let Some(StructureObject::StructureLink(source_link)) = source_links
+                            .iter()
+                            .filter(|link| creep.pos().get_range_to(link.pos()) <= 2)
+                            .min_by_key(|link| creep.pos().get_range_to(link.pos()))
+                        {
+                            let harvest_task = Box::new(HarvestSourceTask::new(source.id()));
+                            let transfer_task = Box::new(TransferTask::new(source_link.id()));
+                            return Some(TaskList::new(vec![harvest_task, transfer_task], true));
+                        }
+                    }
+
+                    let harvest_task = Box::new(HarvestSourceTask::new(source.id()));
+                    return Some(TaskList::new(vec![harvest_task], false));
+
+                    //
                 } else {
                     // There are no sources to gather from and the creep has no energy
                     // so do nothing
@@ -956,7 +1022,9 @@ impl TaskManager {
                 }
             } else {
                 // Go back to an owned room if we can't harvest in the current room
-                return get_travel_home_task(creep);
+                if let Some(task) = get_travel_home_task(creep) {
+                    return Some(TaskList::new(vec![task], false));
+                }
             }
         }
 
@@ -986,7 +1054,8 @@ fn get_travel_home_task(creep: &Creep) -> Option<Box<dyn Task>> {
     }
 }
 
-fn allow_withdrawal_from_storage(room: &Room, next_task: Box<dyn Task>) -> Box<dyn Task> {
+fn allow_withdrawal_from_storage(room: &Room, next_task: Box<dyn Task>) -> TaskList {
+    let mut tasks = vec![next_task];
     let structures = room.find(find::STRUCTURES, None);
     let storage = structures
         .iter()
@@ -1002,13 +1071,13 @@ fn allow_withdrawal_from_storage(room: &Room, next_task: Box<dyn Task>) -> Box<d
 
     if let Some(storage) = storage {
         if let StructureObject::StructureStorage(storage) = storage {
-            let withdraw_task = Box::new(WithdrawTask::new(storage.id(), None, Some(next_task)));
+            let withdraw_task = Box::new(WithdrawTask::new(storage.id()));
 
-            return withdraw_task;
+            tasks.insert(0, withdraw_task)
         }
     }
 
-    next_task
+    return TaskList::new(tasks, false);
 }
 
 fn can_creep_handle_task(creep: &Creep, task: &dyn Task) -> bool {
@@ -1033,7 +1102,7 @@ fn can_creep_handle_task(creep: &Creep, task: &dyn Task) -> bool {
 
 type CompleteCallback = Box<dyn FnOnce(ObjectId<Creep>)>;
 type CancelCallback = Box<dyn FnOnce(ObjectId<Creep>)>;
-type SwitchCallback = Box<dyn FnOnce(ObjectId<Creep>, Box<dyn Task>)>;
+type SwitchCallback = Box<dyn FnOnce(ObjectId<Creep>, TaskList)>;
 
 pub trait Task: Debug {
     fn execute(
@@ -1086,4 +1155,37 @@ pub enum TaskType {
 pub struct TaskList {
     tasks: Vec<Box<dyn Task>>,
     repeat: bool,
+    current_task_idx: usize,
+}
+
+impl TaskList {
+    pub fn new(tasks: Vec<Box<dyn Task>>, repeat: bool) -> Self {
+        Self {
+            tasks,
+            repeat,
+            current_task_idx: 0,
+        }
+    }
+
+    pub fn current_task<'a>(&'a self) -> Option<&'a Box<dyn Task>> {
+        self.tasks.get(self.current_task_idx)
+    }
+
+    pub fn current_task_mut<'a>(&'a mut self) -> Option<&'a mut Box<dyn Task>> {
+        self.tasks.get_mut(self.current_task_idx)
+    }
+
+    pub fn next_task(&mut self) -> Option<&Box<dyn Task>> {
+        if self.current_task_idx + 1 >= self.tasks.len() {
+            if self.repeat {
+                self.current_task_idx = 0;
+            } else {
+                return None;
+            }
+        } else {
+            self.current_task_idx += 1;
+        }
+
+        self.tasks.get(self.current_task_idx)
+    }
 }

@@ -25,7 +25,7 @@ impl super::Task for TravelDumbTask {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        _switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
+        _switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
     ) {
         if creep.pos().is_near_to(self.target) {
             complete(creep.try_id().unwrap());

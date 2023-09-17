@@ -23,7 +23,7 @@ impl super::Task for AttackTask {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        _switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
+        _switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
     ) {
         let target_creep = self.target.resolve();
         if target_creep.is_none() {

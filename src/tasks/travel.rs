@@ -25,7 +25,7 @@ impl<T: HasPosition + Resolvable> super::Task for TravelTask<T> {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        _switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
+        _switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
     ) {
         let target = self.target.resolve();
         if target.is_none() {

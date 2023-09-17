@@ -53,12 +53,16 @@ pub fn game_loop() {
         let mut task_manager = task_manager_refcell.borrow_mut();
         task_manager.clean_up_tasks();
         task_manager.classify_links();
-        let flag_tasks = task_manager.assign_tasks();
+        let flag_tasks_lists = task_manager.assign_tasks();
         task_manager.execute_tasks();
 
-        let claim_task_exists = flag_tasks
-            .iter()
-            .any(|t| t.get_type() == tasks::TaskType::Claim);
+        let claim_task_exists = flag_tasks_lists.iter().any(|t| {
+            if let Some(task) = t.current_task() {
+                task.get_type() == tasks::TaskType::Claim
+            } else {
+                false
+            }
+        });
 
         // Spawn creeps
         let mut room_spawn_goals: HashMap<RoomName, SpawnGoals> = HashMap::new();

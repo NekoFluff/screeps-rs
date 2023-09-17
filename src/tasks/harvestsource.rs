@@ -32,34 +32,12 @@ impl super::Task for HarvestSourceTask {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
+        switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
     ) {
         let creep_type = super::utils::get_creep_type(creep);
         let room = creep.room().unwrap();
         if creep.store().get_free_capacity(Some(ResourceType::Energy)) == 0 {
-            let source_links = utils::get_source_links(&room);
-            // transfer to closest source link
-            if let Some(StructureObject::StructureLink(source_link)) = source_links
-                .iter()
-                .filter(|link| creep.pos().get_range_to(link.pos()) <= 2)
-                .min_by_key(|link| creep.pos().get_range_to(link.pos()))
-            {
-                let mut next_task: Option<Box<dyn super::Task>> = None;
-                if creep_type == "source_harvester" {
-                    next_task = Some(Box::new(HarvestSourceTask::new(self.target)));
-                }
-
-                switch(
-                    creep.try_id().unwrap(),
-                    Box::new(super::transfer::TransferTask::new(
-                        source_link.try_id().unwrap(),
-                        next_task,
-                    )),
-                );
-            } else {
-                complete(creep.try_id().unwrap());
-            }
-
+            complete(creep.try_id().unwrap());
             return;
         }
 

@@ -8,12 +8,11 @@ use screeps::{
 
 pub struct TransferTask<T: Transferable + Resolvable + HasStore> {
     target: ObjectId<T>,
-    next_task: Option<Box<dyn super::Task>>,
 }
 
 impl<T: Transferable + Resolvable + HasStore> TransferTask<T> {
-    pub fn new(target: ObjectId<T>, next_task: Option<Box<dyn super::Task>>) -> TransferTask<T> {
-        TransferTask { target, next_task }
+    pub fn new(target: ObjectId<T>) -> TransferTask<T> {
+        TransferTask { target }
     }
 
     fn get_nearest_extension(&self, creep: &Creep) -> Option<ObjectId<StructureExtension>> {
@@ -63,14 +62,10 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
+        switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
     ) {
         if creep.store().get_used_capacity(Some(ResourceType::Energy)) == 0 {
-            if self.next_task.is_some() {
-                switch(creep.try_id().unwrap(), self.next_task.take().unwrap());
-            } else {
-                complete(creep.try_id().unwrap());
-            }
+            complete(creep.try_id().unwrap());
             return;
         }
 
@@ -88,10 +83,8 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
             if let Some(extension_id) = self.get_nearest_extension(creep) {
                 switch(
                     creep.try_id().unwrap(),
-                    Box::new(TransferTask::new(extension_id, None)),
+                    super::TaskList::new(vec![Box::new(TransferTask::new(extension_id))], false),
                 );
-            } else if self.next_task.is_some() {
-                switch(creep.try_id().unwrap(), self.next_task.take().unwrap());
             } else {
                 complete(creep.try_id().unwrap());
             }
@@ -108,7 +101,10 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
                         if let Some(extension_id) = self.get_nearest_extension(creep) {
                             switch(
                                 creep.try_id().unwrap(),
-                                Box::new(TransferTask::new(extension_id, None)),
+                                super::TaskList::new(
+                                    vec![Box::new(TransferTask::new(extension_id))],
+                                    false,
+                                ),
                             );
                             return;
                         }

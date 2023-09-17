@@ -8,31 +8,16 @@ use screeps::{
 
 pub struct WithdrawTask<T: Withdrawable + Resolvable + HasStore> {
     target: ObjectId<T>,
-    upgrade_controller_id: Option<ObjectId<StructureController>>,
-    next_task: Option<Box<dyn super::Task>>,
 }
 
 impl<T: Withdrawable + Resolvable + HasStore> WithdrawTask<T> {
-    pub fn new(
-        target: ObjectId<T>,
-        upgrade_controller_id: Option<ObjectId<StructureController>>,
-        next_task: Option<Box<dyn super::Task>>,
-    ) -> WithdrawTask<T> {
-        WithdrawTask {
-            target,
-            upgrade_controller_id,
-            next_task,
-        }
+    pub fn new(target: ObjectId<T>) -> WithdrawTask<T> {
+        WithdrawTask { target }
     }
 }
 
 impl<T: Withdrawable + Resolvable + HasStore> super::Task for WithdrawTask<T> {
     fn get_type(&self) -> super::TaskType {
-        if self.next_task.is_some() {
-            return self.next_task.as_ref().unwrap().get_type();
-        } else if self.upgrade_controller_id.is_some() {
-            return super::TaskType::Upgrade;
-        }
         super::TaskType::Withdraw
     }
 
@@ -41,7 +26,7 @@ impl<T: Withdrawable + Resolvable + HasStore> super::Task for WithdrawTask<T> {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
+        switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
     ) {
         let target = self.target.resolve();
         if target.is_none() {
@@ -51,40 +36,12 @@ impl<T: Withdrawable + Resolvable + HasStore> super::Task for WithdrawTask<T> {
         }
         let target = target.unwrap();
 
-        if self.upgrade_controller_id.is_some()
-            && creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0
-        {
-            // Switch to next task if we have one
-            if let Some(controller_id) = self.upgrade_controller_id {
-                if let Some(controller) = controller_id.resolve() {
-                    creep
-                        .upgrade_controller(&controller)
-                        .unwrap_or_else(|e| match e {
-                            ErrorCode::NotInRange => {
-                                let _ = creep.move_to(&controller);
-                            }
-                            _ => {
-                                info!("couldn't upgrade: {:?}", e);
-                                cancel(creep.try_id().unwrap());
-                            }
-                        });
-                } else {
-                    cancel(creep.try_id().unwrap());
-                }
-            }
-
-            return;
-        }
         // If we're full, or the target is empty, switch to next task or complete
-        else if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0
+        if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0
             || target.store().get_used_capacity(Some(ResourceType::Energy)) == 0
         {
             if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 {
-                if self.next_task.is_some() {
-                    switch(creep.try_id().unwrap(), self.next_task.take().unwrap());
-                } else {
-                    complete(creep.try_id().unwrap());
-                }
+                complete(creep.try_id().unwrap());
             } else {
                 error!("can't switch to next task. no energy in creep.");
 

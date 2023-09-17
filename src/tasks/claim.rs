@@ -30,7 +30,7 @@ impl super::Task for ClaimTask {
         creep: &Creep,
         complete: Box<dyn FnOnce(ObjectId<Creep>)>,
         _cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
-        _switch: Box<dyn FnOnce(ObjectId<Creep>, Box<dyn super::Task>)>,
+        _switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
     ) {
         let room_pos = &self.target;
         let current_room = creep.room().unwrap();
