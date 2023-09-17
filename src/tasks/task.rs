@@ -47,15 +47,17 @@ pub trait Task: Debug {
 
 #[derive(Debug, PartialEq)]
 pub enum TaskType {
+    Attack,
     Build,
+    Claim,
     HarvestSource,
     Heal,
+    Idle,
+    IdleUntil,
     Repair,
     Transfer,
-    Upgrade,
-    Attack,
     Travel,
-    Claim,
     TravelDumb,
+    Upgrade,
     Withdraw,
 }

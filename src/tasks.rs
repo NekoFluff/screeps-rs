@@ -1,6 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use log::*;
+use screeps::StructureLink;
 use screeps::{
     find, game, Creep, HasHits, HasPosition, HasTypedId, MaybeHasTypedId, ObjectId,
     OwnedStructureProperties, Part, Position, ResourceType, Room, RoomName, RoomPosition,
@@ -12,6 +13,8 @@ mod build;
 mod claim;
 mod harvest_source;
 mod heal;
+mod idle;
+mod idle_until;
 mod repair;
 mod task;
 mod task_list;
@@ -26,6 +29,8 @@ pub use build::BuildTask;
 pub use claim::ClaimTask;
 pub use harvest_source::HarvestSourceTask;
 pub use heal::HealTask;
+pub use idle::IdleTask;
+pub use idle_until::IdleUntilTask;
 pub use repair::RepairTask;
 pub use task::Task;
 pub use task::TaskType;
@@ -374,6 +379,11 @@ impl TaskManager {
             {
                 self.tasks.remove(completed_task);
             }
+
+            // info!(
+            //     "current task {:?}",
+            //     self.tasks.get(completed_task).unwrap().current_task()
+            // );
         }
         for cancelled_task in cancelled_tasks.borrow().iter() {
             let _ = cancelled_task.resolve().unwrap().say("❌", false);
@@ -1053,21 +1063,33 @@ impl TaskManager {
 
                     // transfer to closest source link and repeat if the creep is a source harvester
                     if creep_type == "source_harvester" {
-                        if let Some(StructureObject::StructureLink(source_link)) = source_links
-                            .iter()
-                            .filter(|link| creep.pos().get_range_to(link.pos()) <= 2)
-                            .min_by_key(|link| creep.pos().get_range_to(link.pos()))
+                        if let Some((StructureObject::StructureLink(source_link), source)) =
+                            source_links
+                                .iter()
+                                .filter(|(link, _source)| creep.pos().get_range_to(link.pos()) <= 2)
+                                .min_by_key(|(link, _source)| creep.pos().get_range_to(link.pos()))
                         {
                             let harvest_task = Box::new(HarvestSourceTask::new(source.id()));
                             let transfer_task = Box::new(TransferTask::new(source_link.id()));
-                            return Some(TaskList::new(vec![harvest_task, transfer_task], true));
+                            let idle_until_task = Box::new(IdleUntilTask::new(
+                                Box::new(|_, source: Option<ObjectId<Source>>| {
+                                    if let Some(source) = source {
+                                        source.resolve().unwrap().energy() > 0
+                                    } else {
+                                        false
+                                    }
+                                }),
+                                Some(source.try_id().unwrap()),
+                            ));
+                            return Some(TaskList::new(
+                                vec![harvest_task, transfer_task, idle_until_task],
+                                true,
+                            ));
                         }
                     }
 
                     let harvest_task = Box::new(HarvestSourceTask::new(source.id()));
                     return Some(TaskList::new(vec![harvest_task], false));
-
-                    //
                 } else {
                     // There are no sources to gather from and the creep has no energy
                     // so do nothing
