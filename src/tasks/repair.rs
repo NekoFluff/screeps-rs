@@ -60,6 +60,10 @@ impl super::Task for RepairTask {
             .map(|target| target.hits())
             .unwrap_or(0)
     }
+
+    fn get_icon(&self) -> String {
+        String::from("🔧")
+    }
 }
 
 impl Debug for RepairTask {

@@ -61,6 +61,10 @@ impl<T: HasPosition + Resolvable> super::Task for TravelTask<T> {
     fn requires_energy(&self) -> bool {
         false
     }
+
+    fn get_icon(&self) -> String {
+        String::from("🚶🎯")
+    }
 }
 
 impl<T: HasPosition + Resolvable> Debug for TravelTask<T> {

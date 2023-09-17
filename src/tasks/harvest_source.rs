@@ -84,6 +84,10 @@ impl super::Task for HarvestSourceTask {
     fn requires_energy(&self) -> bool {
         false
     }
+
+    fn get_icon(&self) -> String {
+        String::from("⛏️⚡")
+    }
 }
 
 impl Debug for HarvestSourceTask {

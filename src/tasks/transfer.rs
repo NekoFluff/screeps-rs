@@ -120,6 +120,10 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
     fn get_target_pos(&self) -> Option<screeps::Position> {
         self.target.resolve().map(|target| target.pos())
     }
+
+    fn get_icon(&self) -> String {
+        String::from("🚚")
+    }
 }
 
 impl<T: Transferable + Resolvable + HasStore> Debug for TransferTask<T> {

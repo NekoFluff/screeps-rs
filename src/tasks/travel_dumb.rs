@@ -54,6 +54,10 @@ impl super::Task for TravelDumbTask {
     fn requires_energy(&self) -> bool {
         false
     }
+
+    fn get_icon(&self) -> String {
+        String::from("🚶")
+    }
 }
 
 impl Debug for TravelDumbTask {

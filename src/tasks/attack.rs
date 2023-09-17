@@ -59,6 +59,10 @@ impl super::Task for AttackTask {
     fn requires_energy(&self) -> bool {
         false
     }
+
+    fn get_icon(&self) -> String {
+        String::from("⚔️")
+    }
 }
 
 impl Debug for AttackTask {

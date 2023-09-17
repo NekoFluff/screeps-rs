@@ -341,6 +341,7 @@ impl TaskManager {
                 let cancelled_tasks_clone = cancelled_tasks.clone();
                 let switch_tasks_clone = switch_tasks.clone();
                 if let Some(task) = task_list.current_task_mut() {
+                    let _ = creep.say(&task.get_icon(), false);
                     task.execute(
                         &creep,
                         Box::new(move |creep_id| completed_tasks_clone.borrow_mut().push(creep_id)),
@@ -353,6 +354,7 @@ impl TaskManager {
             }
         }
         for completed_task in completed_tasks.borrow().iter() {
+            let _ = completed_task.resolve().unwrap().say("✅", false);
             info!(
                 "{} completed {:?}",
                 game::get_object_by_id_typed(completed_task).unwrap().name(),
@@ -374,6 +376,7 @@ impl TaskManager {
             }
         }
         for cancelled_task in cancelled_tasks.borrow().iter() {
+            let _ = cancelled_task.resolve().unwrap().say("❌", false);
             info!(
                 "{} did not successfully complete {:?}",
                 game::get_object_by_id_typed(cancelled_task).unwrap().name(),
@@ -394,6 +397,7 @@ impl TaskManager {
             }
         }
         for (creep_id, task_list) in switch_tasks.borrow_mut().drain() {
+            let _ = creep_id.resolve().unwrap().say("🔄", false);
             let task = task_list.current_task().unwrap();
             info!(
                 "{}'s task list was switched to {:?}",

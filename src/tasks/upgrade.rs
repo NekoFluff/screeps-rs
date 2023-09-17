@@ -53,6 +53,10 @@ impl super::Task for UpgradeTask {
     fn get_target_pos(&self) -> Option<screeps::Position> {
         self.target.resolve().map(|target| target.pos())
     }
+
+    fn get_icon(&self) -> String {
+        String::from("🛠️")
+    }
 }
 
 impl Debug for UpgradeTask {

@@ -65,6 +65,10 @@ impl super::Task for ClaimTask {
     fn requires_energy(&self) -> bool {
         false
     }
+
+    fn get_icon(&self) -> String {
+        String::from("🏳️")
+    }
 }
 
 impl Debug for ClaimTask {

@@ -39,6 +39,10 @@ pub trait Task: Debug {
     fn requires_energy(&self) -> bool {
         true
     }
+
+    fn get_icon(&self) -> String {
+        String::from("")
+    }
 }
 
 #[derive(Debug, PartialEq)]

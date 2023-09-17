@@ -63,6 +63,10 @@ impl<T: Withdrawable + Resolvable + HasStore> super::Task for WithdrawTask<T> {
     fn requires_energy(&self) -> bool {
         false
     }
+
+    fn get_icon(&self) -> String {
+        String::from("⚡")
+    }
 }
 
 impl<T: Withdrawable + Resolvable + HasStore> Debug for WithdrawTask<T> {
