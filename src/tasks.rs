@@ -568,7 +568,10 @@ impl TaskManager {
                     && tower.store().get_free_capacity(Some(ResourceType::Energy)) > 0
                 {
                     if let Some(id) = tower.try_id() {
-                        tasks.push(Box::new(TransferTask::new(id, None)));
+                        tasks.push(allow_withdrawal_from_storage(
+                            &room,
+                            Box::new(TransferTask::new(id, None)),
+                        ));
                     }
                 }
             }
@@ -687,7 +690,7 @@ impl TaskManager {
                                         .unwrap()
                                         .store()
                                         .get_free_capacity(Some(ResourceType::Energy))
-                                        >= 0
+                                        > 0
                             })
                             .min_by(|a, b| {
                                 storage_link
