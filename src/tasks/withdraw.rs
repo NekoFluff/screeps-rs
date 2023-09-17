@@ -30,6 +30,8 @@ impl<T: Withdrawable + Resolvable + HasStore> super::Task for WithdrawTask<T> {
     fn get_type(&self) -> super::TaskType {
         if self.next_task.is_some() {
             return self.next_task.as_ref().unwrap().get_type();
+        } else if self.upgrade_controller_id.is_some() {
+            return super::TaskType::Upgrade;
         }
         super::TaskType::Withdraw
     }

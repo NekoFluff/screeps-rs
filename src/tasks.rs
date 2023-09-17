@@ -634,7 +634,7 @@ impl TaskManager {
             .iter()
         {
             if let StructureObject::StructureLink(controller_link) = controller_link {
-                if self.is_pos_being_worked_on(&room.name(), &controller_link.pos(), 2) {
+                if self.is_pos_being_worked_on(&room.name(), &controller_link.pos(), 1) {
                     continue;
                 }
 
@@ -815,6 +815,26 @@ impl TaskManager {
 
         if creep_type == "source_harvester" {
             return self.get_harvest_source_task(creep, false, true);
+        } else if creep_type == "upgrader" {
+            let structure = self
+                .room_links
+                .get(&creep.room().unwrap().name())
+                .unwrap()
+                .controller_links
+                .get(0)
+                .unwrap();
+
+            if let StructureObject::StructureLink(link) = structure {
+                if let Some(controller) = creep.room().unwrap().controller() {
+                    return Some(Box::new(WithdrawTask::new(
+                        link.try_id().unwrap(),
+                        Some(controller.id()),
+                        None,
+                    )));
+                }
+            }
+
+            return None;
         }
 
         if creep_parts.contains(&Part::Attack) {
@@ -998,6 +1018,8 @@ fn can_creep_handle_task(creep: &Creep, task: &dyn Task) -> bool {
 
     if creep_type == "source_harvester" {
         return task.get_type() == TaskType::HarvestSource;
+    } else if creep_type == "upgrader" {
+        return task.get_type() == TaskType::Upgrade;
     }
 
     true
@@ -1053,4 +1075,9 @@ pub enum TaskType {
     Claim,
     TravelDumb,
     Withdraw,
+}
+
+pub struct TaskList {
+    tasks: Vec<Box<dyn Task>>,
+    repeat: bool,
 }

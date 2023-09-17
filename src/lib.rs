@@ -88,7 +88,7 @@ pub fn game_loop() {
                     }
                 })
                 .sum::<u32>()
-                + 3;
+                + 1;
 
             if let Some(link_type_map) = task_manager.room_links.get(&room.name()) {
                 let source_link_count = link_type_map.source_links.len();
@@ -101,6 +101,11 @@ pub fn game_loop() {
                         Part::Carry,
                         Part::Carry,
                         Part::Carry,
+                        Part::Carry,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
                         Part::Work,
                         Part::Work,
                         Part::Work,
@@ -114,6 +119,38 @@ pub fn game_loop() {
                     max_body_upgrades: 0,
                     source_modifier: 0,
                     count: source_link_count as u32,
+                    is_global: false,
+                });
+            }
+
+            if let Some(link_type_map) = task_manager.room_links.get(&room.name()) {
+                let controller_link_count = link_type_map.controller_links.len();
+
+                spawn_goals.push(SpawnGoal {
+                    name: "upgrader".to_string(),
+                    body: vec![
+                        Part::Move,
+                        Part::Move,
+                        Part::Carry,
+                        Part::Carry,
+                        Part::Carry,
+                        Part::Carry,
+                        Part::Carry,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                        Part::Work,
+                    ],
+                    body_upgrades: vec![],
+                    max_body_upgrades: 0,
+                    source_modifier: 0,
+                    count: controller_link_count as u32,
                     is_global: false,
                 });
             }
