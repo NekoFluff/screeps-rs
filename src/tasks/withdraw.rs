@@ -74,8 +74,7 @@ impl<T: Withdrawable + Resolvable + HasStore> super::Task for WithdrawTask<T> {
             return;
         }
         // If we're full, or the target is empty, switch to next task or complete
-        else if creep.store().get_used_capacity(Some(ResourceType::Energy))
-            == creep.store().get_capacity(Some(ResourceType::Energy))
+        else if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0
             || target.store().get_used_capacity(Some(ResourceType::Energy)) == 0
         {
             if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 {
