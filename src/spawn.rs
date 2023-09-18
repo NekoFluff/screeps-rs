@@ -41,7 +41,7 @@ impl SpawnManager {
         }
     }
 
-    pub fn spawn_creeps(&self) {
+    pub fn spawn_creeps(&mut self) {
         let mut additional = 0;
 
         for spawn in game::spawns().values() {
@@ -115,7 +115,13 @@ impl SpawnManager {
                             );
 
                             match spawn.spawn_creep(&body_parts, &creep_name) {
-                                Ok(()) => additional += 1,
+                                Ok(()) => {
+                                    additional += 1;
+                                    self.room_creep_counts
+                                        .get_mut(&room_name)
+                                        .unwrap()
+                                        .insert(spawn_goal.name.clone(), creep_count + 1);
+                                }
                                 Err(e) => debug!("couldn't spawn {}: {:?}", spawn_goal.name, e),
                             }
 
