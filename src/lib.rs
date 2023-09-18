@@ -17,7 +17,7 @@ mod utils;
 // add wasm_bindgen to any function you would like to expose for call from js
 #[wasm_bindgen]
 pub fn setup() {
-    logging::setup_logging(logging::Info);
+    logging::setup_logging(logging::Trace);
 }
 
 // this is one way to persist data between ticks within Rust's memory, as opposed to
@@ -124,11 +124,6 @@ pub fn game_loop() {
                     Part::Carry,
                     Part::Carry,
                     Part::Carry,
-                    Part::Carry,
-                    Part::Work,
-                    Part::Work,
-                    Part::Work,
-                    Part::Work,
                     Part::Work,
                     Part::Work,
                     Part::Work,
