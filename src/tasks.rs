@@ -284,26 +284,12 @@ impl TaskManager {
     pub fn set_task_list(&mut self, creep: &Creep, task_list: TaskList) {
         if let Some(creep_id) = creep.try_id() {
             let task = task_list.current_task().unwrap();
-            self.set_task(creep, task);
+            update_creep_memory(creep, task);
             if let Some(pos) = task.get_target_pos() {
                 self.update_working_creeps_by_room(creep, pos);
             }
             self.tasks.insert(creep_id, task_list);
         }
-    }
-
-    fn set_task(&self, creep: &Creep, task: &dyn Task) {
-        info!(
-            "{} was assigned to {:?} at {:?}",
-            creep.name(),
-            task,
-            task.get_target_pos()
-        );
-        let _ = js_sys::Reflect::set(
-            &creep.memory(),
-            &JsValue::from_str("task"),
-            &JsValue::from_str(&format!("{:?}", task)),
-        );
     }
 
     fn update_working_creeps_by_room(&mut self, creep: &Creep, target_pos: Position) {
@@ -377,25 +363,13 @@ impl TaskManager {
                     .unwrap(),
             );
 
-            let has_next_task = self
-                .tasks
-                .get_mut(completed_task)
-                .unwrap()
-                .next_task()
-                .is_none();
-            if !has_next_task {
-                self.tasks.remove(completed_task);
-            } else {
-                let task = self
-                    .tasks
-                    .get(completed_task)
-                    .unwrap()
-                    .current_task()
-                    .unwrap();
-                self.set_task(&creep, task);
+            if let Some(task) = self.tasks.get_mut(completed_task).unwrap().next_task() {
+                update_creep_memory(&creep, task);
                 if let Some(pos) = task.get_target_pos() {
                     self.update_working_creeps_by_room(&creep, pos)
                 }
+            } else {
+                self.tasks.remove(completed_task);
             }
 
             // info!(
@@ -415,25 +389,14 @@ impl TaskManager {
                     .current_task()
                     .unwrap(),
             );
-            let has_next_task = self
-                .tasks
-                .get_mut(cancelled_task)
-                .unwrap()
-                .next_task()
-                .is_none();
-            if !has_next_task {
-                self.tasks.remove(cancelled_task);
-            } else {
-                let task = self
-                    .tasks
-                    .get(cancelled_task)
-                    .unwrap()
-                    .current_task()
-                    .unwrap();
-                self.set_task(&creep, task);
+
+            if let Some(task) = self.tasks.get_mut(cancelled_task).unwrap().next_task() {
+                update_creep_memory(&creep, task);
                 if let Some(pos) = task.get_target_pos() {
                     self.update_working_creeps_by_room(&creep, pos)
                 }
+            } else {
+                self.tasks.remove(cancelled_task);
             }
         }
         for (creep_id, task_list) in switch_tasks.borrow_mut().drain() {
@@ -1216,4 +1179,18 @@ fn can_creep_handle_task(creep: &Creep, task: &dyn Task) -> bool {
     }
 
     true
+}
+
+fn update_creep_memory(creep: &Creep, task: &dyn Task) {
+    info!(
+        "{} was assigned to {:?} at {:?}",
+        creep.name(),
+        task,
+        task.get_target_pos()
+    );
+    let _ = js_sys::Reflect::set(
+        &creep.memory(),
+        &JsValue::from_str("task"),
+        &JsValue::from_str(&format!("{:?}", task)),
+    );
 }
