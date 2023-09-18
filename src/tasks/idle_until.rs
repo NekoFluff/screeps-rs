@@ -2,17 +2,19 @@ use std::fmt::Debug;
 
 use screeps::{Creep, MaybeHasTypedId, ObjectId};
 
+type UntilFn<T> = fn(&Creep, &T) -> bool;
+
 pub struct IdleUntilTask<T> {
-    until: Box<dyn Fn(&Creep, Option<ObjectId<T>>) -> bool>,
-    structure: Option<ObjectId<T>>,
+    until: UntilFn<T>,
+    pass_through: T,
 }
 
 impl<T> IdleUntilTask<T> {
-    pub fn new(
-        until: Box<dyn Fn(&Creep, Option<ObjectId<T>>) -> bool>,
-        structure: Option<ObjectId<T>>,
-    ) -> IdleUntilTask<T> {
-        IdleUntilTask { until, structure }
+    pub fn new(until: UntilFn<T>, pass_through: T) -> IdleUntilTask<T> {
+        IdleUntilTask {
+            until,
+            pass_through,
+        }
     }
 }
 impl<T> super::Task for IdleUntilTask<T> {
@@ -27,7 +29,7 @@ impl<T> super::Task for IdleUntilTask<T> {
         _cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
         _switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
     ) {
-        if (self.until)(creep, self.structure.clone()) {
+        if (self.until)(creep, &self.pass_through) {
             complete(creep.try_id().unwrap());
         }
     }
