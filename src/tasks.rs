@@ -640,28 +640,6 @@ impl TaskManager {
             }
         }
 
-        // towers
-        let towers = my_structures
-            .iter()
-            .filter(|s| s.structure_type() == StructureType::Tower);
-        for tower in towers {
-            if let StructureObject::StructureTower(tower) = tower {
-                if tower.is_active()
-                    && tower.store().get_free_capacity(Some(ResourceType::Energy)) as u32
-                        > tower.store().get_capacity(Some(ResourceType::Energy)) / 2
-                {
-                    if let Some(id) = tower.try_id() {
-                        tasks.push(allow_withdrawal_from_storage(
-                            &room,
-                            Box::new(TransferTask::new(id)),
-                        ));
-                    }
-                }
-            }
-        }
-
-        utils::log_cpu_usage("get room task lists - tower tasks");
-
         // transfer energy from link to storage
         for storage_link in self
             .room_links
@@ -773,6 +751,28 @@ impl TaskManager {
         }
 
         utils::log_cpu_usage("get room task lists - spawn tasks");
+
+        // towers
+        let towers = my_structures
+            .iter()
+            .filter(|s| s.structure_type() == StructureType::Tower);
+        for tower in towers {
+            if let StructureObject::StructureTower(tower) = tower {
+                if tower.is_active()
+                    && tower.store().get_free_capacity(Some(ResourceType::Energy)) as u32
+                        > tower.store().get_capacity(Some(ResourceType::Energy)) / 2
+                {
+                    if let Some(id) = tower.try_id() {
+                        tasks.push(allow_withdrawal_from_storage(
+                            &room,
+                            Box::new(TransferTask::new(id)),
+                        ));
+                    }
+                }
+            }
+        }
+
+        utils::log_cpu_usage("get room task lists - tower tasks");
 
         // transfer energy from link to controller
         for controller_link in self
