@@ -284,52 +284,58 @@ impl TaskManager {
     pub fn set_task_list(&mut self, creep: &Creep, task_list: TaskList) {
         if let Some(creep_id) = creep.try_id() {
             let task = task_list.current_task().unwrap();
-            info!(
-                "{} was assigned to {:?} at {:?}",
-                creep.name(),
-                task,
-                task.get_target_pos()
-            );
-            let _ = js_sys::Reflect::set(
-                &creep.memory(),
-                &JsValue::from_str("task"),
-                &JsValue::from_str(&format!("{:?}", task)),
-            );
-
-            if let Some(target_pos) = task.get_target_pos() {
-                // Keep track of the position change
-                if let Some(room) = self
-                    .working_creeps_by_room_and_pos
-                    .get_mut(&target_pos.room_name())
-                {
-                    *room.entry(target_pos).or_insert(0) += 1;
-                }
-
-                // Keep track of the room switch
-                if target_pos.room_name() != creep.room().unwrap().name() {
-                    // info!(
-                    //     "{} switched rooms from {} to {}",
-                    //     creep.name(),
-                    //     creep.room().unwrap().name(),
-                    //     target_pos.room_name()
-                    // );
-
-                    if let Some(room) = self
-                        .working_creeps_by_room_and_type
-                        .get_mut(&target_pos.room_name())
-                    {
-                        *room.entry(get_creep_type(creep)).or_insert(0) += 1;
-                    }
-                    if let Some(room) = self
-                        .working_creeps_by_room_and_type
-                        .get_mut(&creep.room().unwrap().name())
-                    {
-                        *room.entry(get_creep_type(creep)).or_insert(0) -= 1;
-                    }
-                }
+            self.set_task(creep, task);
+            if let Some(pos) = task.get_target_pos() {
+                self.update_working_creeps_by_room(creep, pos);
             }
-
             self.tasks.insert(creep_id, task_list);
+        }
+    }
+
+    fn set_task(&self, creep: &Creep, task: &dyn Task) {
+        info!(
+            "{} was assigned to {:?} at {:?}",
+            creep.name(),
+            task,
+            task.get_target_pos()
+        );
+        let _ = js_sys::Reflect::set(
+            &creep.memory(),
+            &JsValue::from_str("task"),
+            &JsValue::from_str(&format!("{:?}", task)),
+        );
+    }
+
+    fn update_working_creeps_by_room(&mut self, creep: &Creep, target_pos: Position) {
+        // Keep track of the position change
+        if let Some(room) = self
+            .working_creeps_by_room_and_pos
+            .get_mut(&target_pos.room_name())
+        {
+            *room.entry(target_pos).or_insert(0) += 1;
+        }
+
+        // Keep track of the room switch
+        if target_pos.room_name() != creep.room().unwrap().name() {
+            // info!(
+            //     "{} switched rooms from {} to {}",
+            //     creep.name(),
+            //     creep.room().unwrap().name(),
+            //     target_pos.room_name()
+            // );
+
+            if let Some(room) = self
+                .working_creeps_by_room_and_type
+                .get_mut(&target_pos.room_name())
+            {
+                *room.entry(get_creep_type(creep)).or_insert(0) += 1;
+            }
+            if let Some(room) = self
+                .working_creeps_by_room_and_type
+                .get_mut(&creep.room().unwrap().name())
+            {
+                *room.entry(get_creep_type(creep)).or_insert(0) -= 1;
+            }
         }
     }
 
@@ -359,7 +365,8 @@ impl TaskManager {
             }
         }
         for completed_task in completed_tasks.borrow().iter() {
-            let _ = completed_task.resolve().unwrap().say("✅", false);
+            let creep = completed_task.resolve().unwrap();
+            let _ = creep.say("✅", false);
             info!(
                 "{} completed {:?}",
                 game::get_object_by_id_typed(completed_task).unwrap().name(),
@@ -370,14 +377,25 @@ impl TaskManager {
                     .unwrap(),
             );
 
-            if self
+            let has_next_task = self
                 .tasks
                 .get_mut(completed_task)
                 .unwrap()
                 .next_task()
-                .is_none()
-            {
+                .is_none();
+            if !has_next_task {
                 self.tasks.remove(completed_task);
+            } else {
+                let task = self
+                    .tasks
+                    .get(completed_task)
+                    .unwrap()
+                    .current_task()
+                    .unwrap();
+                self.set_task(&creep, task);
+                if let Some(pos) = task.get_target_pos() {
+                    self.update_working_creeps_by_room(&creep, pos)
+                }
             }
 
             // info!(
@@ -386,7 +404,8 @@ impl TaskManager {
             // );
         }
         for cancelled_task in cancelled_tasks.borrow().iter() {
-            let _ = cancelled_task.resolve().unwrap().say("❌", false);
+            let creep = cancelled_task.resolve().unwrap();
+            let _ = creep.say("❌", false);
             info!(
                 "{} did not successfully complete {:?}",
                 game::get_object_by_id_typed(cancelled_task).unwrap().name(),
@@ -396,14 +415,25 @@ impl TaskManager {
                     .current_task()
                     .unwrap(),
             );
-            if self
+            let has_next_task = self
                 .tasks
                 .get_mut(cancelled_task)
                 .unwrap()
                 .next_task()
-                .is_none()
-            {
+                .is_none();
+            if !has_next_task {
                 self.tasks.remove(cancelled_task);
+            } else {
+                let task = self
+                    .tasks
+                    .get(cancelled_task)
+                    .unwrap()
+                    .current_task()
+                    .unwrap();
+                self.set_task(&creep, task);
+                if let Some(pos) = task.get_target_pos() {
+                    self.update_working_creeps_by_room(&creep, pos)
+                }
             }
         }
         for (creep_id, task_list) in switch_tasks.borrow_mut().drain() {
