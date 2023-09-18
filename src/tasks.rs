@@ -662,6 +662,67 @@ impl TaskManager {
 
         utils::log_cpu_usage("get room task lists - tower tasks");
 
+        // transfer energy from link to storage
+        for storage_link in self
+            .room_links
+            .get(&room.name())
+            .unwrap()
+            .storage_links
+            .iter()
+        {
+            if let StructureObject::StructureLink(storage_link) = storage_link {
+                if self.is_pos_being_worked_on(&room.name(), &storage_link.pos(), 1) {
+                    continue;
+                }
+
+                if storage_link
+                    .store()
+                    .get_used_capacity(Some(ResourceType::Energy))
+                    > 0
+                {
+                    if let Some(id) = storage_link.try_id() {
+                        // get storage closest to link
+                        let storage = my_structures
+                            .iter()
+                            .filter(|s| {
+                                s.structure_type() == StructureType::Storage
+                                    && s.pos().in_range_to(storage_link.pos(), 2)
+                                    && s.as_has_store()
+                                        .unwrap()
+                                        .store()
+                                        .get_free_capacity(Some(ResourceType::Energy))
+                                        as u32
+                                        > s.as_has_store()
+                                            .unwrap()
+                                            .store()
+                                            .get_capacity(Some(ResourceType::Energy))
+                                            / 2
+                            })
+                            .min_by(|a, b| {
+                                storage_link
+                                    .pos()
+                                    .get_range_to(a.pos())
+                                    .cmp(&storage_link.pos().get_range_to(b.pos()))
+                            });
+
+                        if let Some(storage) = storage {
+                            if let StructureObject::StructureStorage(storage) = storage {
+                                let transfer_task = Box::new(TransferTask::new(storage.id()));
+                                let withdraw_task = Box::new(WithdrawTask::new(id));
+                                tasks
+                                    .push(TaskList::new(vec![withdraw_task, transfer_task], false));
+                            } else {
+                                let withdraw_task = Box::new(WithdrawTask::new(id));
+                                tasks.push(TaskList::new(vec![withdraw_task], false));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        utils::log_cpu_usage("get room task lists - link to storage tasks");
+
         // extensions
         let extensions = my_structures
             .iter()
@@ -751,67 +812,6 @@ impl TaskManager {
 
         utils::log_cpu_usage("get room task lists - link to controller tasks");
 
-        // transfer energy from link to storage
-        for storage_link in self
-            .room_links
-            .get(&room.name())
-            .unwrap()
-            .storage_links
-            .iter()
-        {
-            if let StructureObject::StructureLink(storage_link) = storage_link {
-                if self.is_pos_being_worked_on(&room.name(), &storage_link.pos(), 1) {
-                    continue;
-                }
-
-                if storage_link
-                    .store()
-                    .get_used_capacity(Some(ResourceType::Energy))
-                    > 0
-                {
-                    if let Some(id) = storage_link.try_id() {
-                        // get storage closest to link
-                        let storage = my_structures
-                            .iter()
-                            .filter(|s| {
-                                s.structure_type() == StructureType::Storage
-                                    && s.pos().in_range_to(storage_link.pos(), 2)
-                                    && s.as_has_store()
-                                        .unwrap()
-                                        .store()
-                                        .get_free_capacity(Some(ResourceType::Energy))
-                                        as u32
-                                        > s.as_has_store()
-                                            .unwrap()
-                                            .store()
-                                            .get_capacity(Some(ResourceType::Energy))
-                                            / 2
-                            })
-                            .min_by(|a, b| {
-                                storage_link
-                                    .pos()
-                                    .get_range_to(a.pos())
-                                    .cmp(&storage_link.pos().get_range_to(b.pos()))
-                            });
-
-                        if let Some(storage) = storage {
-                            if let StructureObject::StructureStorage(storage) = storage {
-                                let transfer_task = Box::new(TransferTask::new(storage.id()));
-                                let withdraw_task = Box::new(WithdrawTask::new(id));
-                                tasks
-                                    .push(TaskList::new(vec![withdraw_task, transfer_task], false));
-                            } else {
-                                let withdraw_task = Box::new(WithdrawTask::new(id));
-                                tasks.push(TaskList::new(vec![withdraw_task], false));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        utils::log_cpu_usage("get room task lists - link to storage tasks");
-
         // healing
         // if creep.hits() < creep.hits_max() {
         //     info!("{} needs healing", creep.name());
@@ -850,7 +850,7 @@ impl TaskManager {
                         continue;
                     }
                 } else if let StructureObject::StructureRoad(s) = structure {
-                    if s.hits() > s.hits_max() / 2 {
+                    if s.hits() > s.hits_max() * 2 / 3 {
                         continue;
                     }
                 } else if let StructureObject::StructureRampart(s) = structure {
