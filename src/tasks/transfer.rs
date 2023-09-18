@@ -83,7 +83,7 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
             if let Some(extension_id) = self.get_nearest_extension(creep) {
                 switch(
                     creep.try_id().unwrap(),
-                    super::TaskList::new(vec![Box::new(TransferTask::new(extension_id))], false),
+                    super::TaskList::new(vec![Box::new(TransferTask::new(extension_id))], false, 0),
                 );
             } else {
                 complete(creep.try_id().unwrap());
@@ -104,6 +104,7 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
                                 super::TaskList::new(
                                     vec![Box::new(TransferTask::new(extension_id))],
                                     false,
+                                    0,
                                 ),
                             );
                             return;

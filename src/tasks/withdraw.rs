@@ -37,7 +37,8 @@ impl<T: Withdrawable + Resolvable + HasStore> super::Task for WithdrawTask<T> {
         let target = target.unwrap();
 
         // If the creep has energy, or the target has no energy, complete the task
-        if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0
+        if creep.store().get_used_capacity(Some(ResourceType::Energy))
+            == creep.store().get_capacity(Some(ResourceType::Energy))
             || target.store().get_used_capacity(Some(ResourceType::Energy)) == 0
         {
             complete(creep.try_id().unwrap());

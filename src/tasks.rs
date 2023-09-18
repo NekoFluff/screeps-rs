@@ -284,7 +284,7 @@ impl TaskManager {
     pub fn set_task_list(&mut self, creep: &Creep, task_list: TaskList) {
         if let Some(creep_id) = creep.try_id() {
             let task = task_list.current_task().unwrap();
-            update_creep_memory(creep, task);
+            update_creep_memory(creep, &task_list);
             if let Some(pos) = task.get_target_pos() {
                 self.update_working_creeps_by_room(creep, pos);
             }
@@ -363,8 +363,13 @@ impl TaskManager {
                     .unwrap(),
             );
 
-            if let Some(task) = self.tasks.get_mut(completed_task).unwrap().next_task() {
-                update_creep_memory(&creep, task);
+            {
+                let task_list = self.tasks.get(completed_task).unwrap();
+                update_creep_memory(&creep, task_list);
+            }
+
+            let task_list = self.tasks.get_mut(completed_task).unwrap();
+            if let Some(task) = task_list.next_task() {
                 if let Some(pos) = task.get_target_pos() {
                     self.update_working_creeps_by_room(&creep, pos)
                 }
@@ -390,8 +395,13 @@ impl TaskManager {
                     .unwrap(),
             );
 
-            if let Some(task) = self.tasks.get_mut(cancelled_task).unwrap().next_task() {
-                update_creep_memory(&creep, task);
+            {
+                let task_list = self.tasks.get(cancelled_task).unwrap();
+                update_creep_memory(&creep, task_list);
+            }
+
+            let task_list = self.tasks.get_mut(cancelled_task).unwrap();
+            if let Some(task) = task_list.next_task() {
                 if let Some(pos) = task.get_target_pos() {
                     self.update_working_creeps_by_room(&creep, pos)
                 }
@@ -504,21 +514,23 @@ impl TaskManager {
         task_lists: &mut Vec<TaskList>,
     ) -> Option<TaskList> {
         // (index, task)
-        let mut similar_tasks: Vec<(usize, &dyn Task)> = vec![];
+        let mut similar_task_lists: Vec<(usize, &TaskList)> = vec![];
         for (index, task_list) in task_lists.iter().enumerate() {
             let task = task_list.current_task().unwrap();
-            if similar_tasks.is_empty() && can_creep_handle_task(creep, task) {
+            if similar_task_lists.is_empty() && can_creep_handle_task(creep, task) {
                 if task.requires_energy()
                     && creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0
                     || !task.requires_energy()
                 {
-                    similar_tasks.push((index, task));
+                    similar_task_lists.push((index, task_list));
                     continue;
                 }
-            } else if !similar_tasks.is_empty() {
-                let first_task = similar_tasks.get(0).unwrap().1;
-                if task.get_type() == first_task.get_type() {
-                    similar_tasks.push((index, task));
+            } else if !similar_task_lists.is_empty() {
+                let first_task_list = similar_task_lists.get(0).unwrap().1;
+                let first_primary_task = first_task_list.get_primary_task().unwrap();
+                let primary_task = task_list.get_primary_task().unwrap();
+                if primary_task.get_type() == first_primary_task.get_type() {
+                    similar_task_lists.push((index, task_list));
                 } else {
                     break;
                 }
@@ -526,23 +538,26 @@ impl TaskManager {
         }
 
         // Default task
-        if similar_tasks.is_empty() {
+        if similar_task_lists.is_empty() {
             return None;
         }
 
-        if similar_tasks.len() == 1 {
-            return Some(task_lists.remove(similar_tasks.get(0).unwrap().0));
+        if similar_task_lists.len() == 1 {
+            return Some(task_lists.remove(similar_task_lists.get(0).unwrap().0));
         }
 
         // (index, distance to target)
-        let mut tasks_by_value = similar_tasks
+        let mut tasks_by_value = similar_task_lists
             .iter()
             .map(|t| {
-                if t.1.get_type() == TaskType::Repair {
-                    (t.0, t.1.get_priority())
+                let task = t.1.get_primary_task().unwrap();
+
+                if task.get_type() == TaskType::Repair {
+                    (t.0, task.get_priority())
                 } else {
-                    if let Some(target) = t.1.get_target_pos() {
+                    if let Some(target) = task.get_target_pos() {
                         let distance = creep.pos().get_range_to(target);
+
                         return (t.0, distance);
                     }
                     (t.0, u32::MAX)
@@ -585,7 +600,7 @@ impl TaskManager {
 
                     let room_pos = RoomPosition::new(25, 25, room_name);
                     let task = Box::new(ClaimTask::new(room_pos));
-                    task_lists.push(TaskList::new(vec![task], false));
+                    task_lists.push(TaskList::new(vec![task], false, 0));
                 } else {
                     error!("invalid room name: {}", room_name);
                     flag.remove();
@@ -617,8 +632,8 @@ impl TaskManager {
         if !enemy_creeps.is_empty() {
             for enemy_creep in enemy_creeps {
                 if let Some(id) = enemy_creep.try_id() {
-                    tasks.push(TaskList::new(vec![Box::new(AttackTask::new(id))], false));
-                    tasks.push(TaskList::new(vec![Box::new(AttackTask::new(id))], false));
+                    tasks.push(TaskList::new(vec![Box::new(AttackTask::new(id))], false, 0));
+                    tasks.push(TaskList::new(vec![Box::new(AttackTask::new(id))], false, 0));
                 }
             }
         }
@@ -629,6 +644,7 @@ impl TaskManager {
                 tasks.push(TaskList::new(
                     vec![Box::new(UpgradeTask::new(controller.id()))],
                     false,
+                    0,
                 ));
             }
 
@@ -636,6 +652,7 @@ impl TaskManager {
                 tasks.push(TaskList::new(
                     vec![Box::new(UpgradeTask::new(controller.id()))],
                     false,
+                    0,
                 ));
             }
         }
@@ -687,11 +704,14 @@ impl TaskManager {
                             if let StructureObject::StructureStorage(storage) = storage {
                                 let transfer_task = Box::new(TransferTask::new(storage.id()));
                                 let withdraw_task = Box::new(WithdrawTask::new(id));
-                                tasks
-                                    .push(TaskList::new(vec![withdraw_task, transfer_task], false));
+                                tasks.push(TaskList::new(
+                                    vec![withdraw_task, transfer_task],
+                                    false,
+                                    1,
+                                ));
                             } else {
                                 let withdraw_task = Box::new(WithdrawTask::new(id));
-                                tasks.push(TaskList::new(vec![withdraw_task], false));
+                                tasks.push(TaskList::new(vec![withdraw_task], false, 0));
                             }
                         }
                     }
@@ -717,14 +737,12 @@ impl TaskManager {
                         continue;
                     }
 
-                    if let Some(id) = extension.try_id() {
-                        let transfer_task = Box::new(TransferTask::new(id));
+                    let transfer_task = Box::new(TransferTask::new(extension.id()));
 
-                        tasks.push(allow_withdrawal_from_storage(&room, transfer_task));
+                    tasks.push(allow_withdrawal_from_storage(&room, transfer_task));
 
-                        extension_transfer_tasks_exist = true;
-                        break;
-                    }
+                    extension_transfer_tasks_exist = true;
+                    // break;
                 }
             }
         }
@@ -804,7 +822,7 @@ impl TaskManager {
                     if let Some(id) = controller_link.try_id() {
                         let upgrade_task = Box::new(UpgradeTask::new(controller.id()));
                         let withdraw_task = Box::new(WithdrawTask::new(id));
-                        tasks.push(TaskList::new(vec![withdraw_task, upgrade_task], false));
+                        tasks.push(TaskList::new(vec![withdraw_task, upgrade_task], false, 1));
                     }
                 }
             }
@@ -949,6 +967,7 @@ impl TaskManager {
                     return Some(TaskList::new(
                         vec![withdraw_task, upgrade_task, idle_until_task],
                         true,
+                        1,
                     ));
                 }
             }
@@ -960,7 +979,7 @@ impl TaskManager {
             if let Some(defend_flag) = game::flags().values().find(|f| f.name() == "defend") {
                 if !creep.pos().in_range_to(defend_flag.pos(), 3) {
                     let task = Box::new(TravelDumbTask::new(defend_flag.pos()));
-                    return Some(TaskList::new(vec![task], false));
+                    return Some(TaskList::new(vec![task], false, 0));
                 } else {
                     return None;
                 }
@@ -969,7 +988,7 @@ impl TaskManager {
             let controller = creep.room().unwrap().controller().unwrap();
             if !creep.pos().in_range_to(controller.pos(), 3) {
                 let task = Box::new(TravelTask::new(controller.id()));
-                return Some(TaskList::new(vec![task], false));
+                return Some(TaskList::new(vec![task], false, 0));
             }
         } else if creep_parts.contains(&Part::Claim) {
             return None;
@@ -980,7 +999,7 @@ impl TaskManager {
                     let task = Box::new(UpgradeTask::new(
                         creep.room().unwrap().controller().unwrap().id(),
                     ));
-                    return Some(TaskList::new(vec![task], false));
+                    return Some(TaskList::new(vec![task], false, 0));
                 }
                 return self.get_harvest_source_task_list(creep, true, false);
             }
@@ -990,7 +1009,7 @@ impl TaskManager {
 
         if !utils::is_mine(&creep.room().unwrap()) {
             if let Some(task) = get_travel_home_task(creep) {
-                return Some(TaskList::new(vec![task], false));
+                return Some(TaskList::new(vec![task], false, 0));
             }
         }
 
@@ -1087,10 +1106,11 @@ impl TaskManager {
                             return Some(TaskList::new(
                                 vec![harvest_task, transfer_task, idle_until_task],
                                 true,
+                                1,
                             ));
                         }
                     }
-                    return Some(TaskList::new(vec![harvest_task], false));
+                    return Some(TaskList::new(vec![harvest_task], false, 0));
                 } else {
                     // There are no sources to gather from and the creep has no energy
                     // so do nothing
@@ -1099,7 +1119,7 @@ impl TaskManager {
             } else {
                 // Go back to an owned room if we can't harvest in the current room
                 if let Some(task) = get_travel_home_task(creep) {
-                    return Some(TaskList::new(vec![task], false));
+                    return Some(TaskList::new(vec![task], false, 0));
                 }
             }
         }
@@ -1151,7 +1171,8 @@ fn allow_withdrawal_from_storage(room: &Room, next_task: Box<dyn Task>) -> TaskL
         tasks.insert(0, withdraw_task)
     }
 
-    TaskList::new(tasks, false)
+    let tasks_count = tasks.len() - 1;
+    TaskList::new(tasks, false, tasks_count)
 }
 
 fn can_creep_handle_task(creep: &Creep, task: &dyn Task) -> bool {
@@ -1174,16 +1195,24 @@ fn can_creep_handle_task(creep: &Creep, task: &dyn Task) -> bool {
     true
 }
 
-fn update_creep_memory(creep: &Creep, task: &dyn Task) {
-    info!(
-        "{} was assigned to {:?} at {:?}",
-        creep.name(),
-        task,
-        task.get_target_pos()
-    );
+fn update_creep_memory(creep: &Creep, task_list: &TaskList) {
+    if let Some(task) = task_list.current_task() {
+        info!(
+            "{} was assigned to {:?} at {:?}",
+            creep.name(),
+            task,
+            task.get_target_pos()
+        );
+        let _ = js_sys::Reflect::set(
+            &creep.memory(),
+            &JsValue::from_str("task"),
+            &JsValue::from_str(&format!("{:?}", task)),
+        );
+    }
+
     let _ = js_sys::Reflect::set(
         &creep.memory(),
-        &JsValue::from_str("task"),
-        &JsValue::from_str(&format!("{:?}", task)),
+        &JsValue::from_str("task_list"),
+        &JsValue::from_str(&format!("{:?}", task_list)),
     );
 }
