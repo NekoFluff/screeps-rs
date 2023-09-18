@@ -269,7 +269,7 @@ impl Default for LinkTypeMap {
 }
 
 fn execute_towers(room: &Room) {
-    // let structures = room.find(find::STRUCTURES, None);
+    let structures = room.find(find::STRUCTURES, None);
     let my_structures = room.find(find::MY_STRUCTURES, None);
     let mut enemies = room.find(find::HOSTILE_CREEPS, None);
 
@@ -286,7 +286,7 @@ fn execute_towers(room: &Room) {
     injured.sort_by_key(|a| a.hits());
 
     // get damaged structures (anything with less than 100K hit points)
-    let mut damaged = my_structures
+    let mut damaged = structures
         .iter()
         .map(|s| s.as_structure())
         .filter(|s| {
