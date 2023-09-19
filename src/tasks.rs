@@ -279,7 +279,7 @@ impl TaskManager {
                 let cancelled_tasks_clone = cancelled_tasks.clone();
                 let switch_tasks_clone = switch_tasks.clone();
                 if let Some(task) = task_list.current_task_mut() {
-                    let _ = creep.say(&task.get_icon(), false);
+                    let cpu_start = screeps::game::cpu::get_used();
                     task.execute(
                         &creep,
                         Box::new(move |creep_id| completed_tasks_clone.borrow_mut().push(creep_id)),
@@ -288,6 +288,14 @@ impl TaskManager {
                             switch_tasks_clone.borrow_mut().insert(creep_id, task);
                         }),
                     );
+                    let cpu_end = screeps::game::cpu::get_used();
+
+                    let mut msg = task.get_icon();
+                    let display_execution_time = true;
+                    if display_execution_time {
+                        msg = format!("{} {:.3}", msg, (cpu_end - cpu_start));
+                    }
+                    let _ = creep.say(&msg, false);
                 }
             }
         }
