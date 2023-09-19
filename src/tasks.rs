@@ -687,16 +687,6 @@ impl TaskManager {
                             .filter(|s| {
                                 s.structure_type() == StructureType::Storage
                                     && s.pos().in_range_to(storage_link.pos(), 2)
-                                    && s.as_has_store()
-                                        .unwrap()
-                                        .store()
-                                        .get_free_capacity(Some(ResourceType::Energy))
-                                        as u32
-                                        > s.as_has_store()
-                                            .unwrap()
-                                            .store()
-                                            .get_capacity(Some(ResourceType::Energy))
-                                            / 2
                             })
                             .min_by(|a, b| {
                                 storage_link
@@ -995,16 +985,6 @@ impl TaskManager {
                     .filter(|s| {
                         s.structure_type() == StructureType::Storage
                             && s.pos().in_range_to(storage_link.pos(), 2)
-                            && s.as_has_store()
-                                .unwrap()
-                                .store()
-                                .get_free_capacity(Some(ResourceType::Energy))
-                                as u32
-                                > s.as_has_store()
-                                    .unwrap()
-                                    .store()
-                                    .get_capacity(Some(ResourceType::Energy))
-                                    / 2
                     })
                     .min_by(|a, b| {
                         storage_link
