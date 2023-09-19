@@ -630,6 +630,17 @@ impl TaskManager {
         let my_structures = room.find(find::MY_STRUCTURES, None);
         let construction_sites = room.find(find::CONSTRUCTION_SITES, None);
         let enemy_creeps = room.find(find::HOSTILE_CREEPS, None);
+        let storage = my_structures
+            .iter()
+            .filter(|s| {
+                s.structure_type() == StructureType::Storage
+                    && s.as_has_store()
+                        .unwrap()
+                        .store()
+                        .get_used_capacity(Some(ResourceType::Energy))
+                        > 0
+            })
+            .last();
 
         utils::log_cpu_usage("get room task lists - get data");
 
@@ -734,7 +745,7 @@ impl TaskManager {
 
                     let transfer_task = Box::new(TransferTask::new(extension.id()));
 
-                    tasks.push(allow_withdrawal_from_storage(&room, transfer_task));
+                    tasks.push(allow_withdrawal_from_storage(storage, transfer_task));
 
                     extension_transfer_tasks_exist = true;
                     // break;
@@ -757,7 +768,7 @@ impl TaskManager {
                     if let Some(id) = spawn.try_id() {
                         let transfer_task = Box::new(TransferTask::new(id));
 
-                        tasks.push(allow_withdrawal_from_storage(&room, transfer_task));
+                        tasks.push(allow_withdrawal_from_storage(storage, transfer_task));
                     }
                 }
             }
@@ -777,7 +788,7 @@ impl TaskManager {
                 {
                     if let Some(id) = tower.try_id() {
                         tasks.push(allow_withdrawal_from_storage(
-                            &room,
+                            storage,
                             Box::new(TransferTask::new(id)),
                         ));
                     }
@@ -836,7 +847,7 @@ impl TaskManager {
         for construction_site in construction_sites.iter() {
             if let Some(id) = construction_site.try_id() {
                 tasks.push(allow_withdrawal_from_storage(
-                    &room,
+                    storage,
                     Box::new(BuildTask::new(id)),
                 ));
             }
@@ -874,7 +885,7 @@ impl TaskManager {
 
                 let id = s.try_id().unwrap();
                 tasks.push(allow_withdrawal_from_storage(
-                    &room,
+                    storage,
                     Box::new(RepairTask::new(id)),
                 ));
 
@@ -1191,21 +1202,11 @@ fn get_travel_home_task(creep: &Creep) -> Option<Box<dyn Task>> {
     }
 }
 
-fn allow_withdrawal_from_storage(room: &Room, next_task: Box<dyn Task>) -> TaskList {
+fn allow_withdrawal_from_storage(
+    storage: Option<&StructureObject>,
+    next_task: Box<dyn Task>,
+) -> TaskList {
     let mut tasks = vec![next_task];
-    let structures = room.find(find::STRUCTURES, None);
-    let storage = structures
-        .iter()
-        .filter(|s| {
-            s.structure_type() == StructureType::Storage
-                && s.as_has_store()
-                    .unwrap()
-                    .store()
-                    .get_used_capacity(Some(ResourceType::Energy))
-                    > 0
-        })
-        .last();
-
     if let Some(StructureObject::StructureStorage(storage)) = storage {
         let withdraw_task = Box::new(WithdrawTask::new(storage.id()));
 

@@ -2,8 +2,8 @@ use std::fmt::Debug;
 
 use log::*;
 use screeps::{
-    Creep, ErrorCode, HasPosition, MaybeHasTypedId, ObjectId, ResourceType, SharedCreepProperties,
-    Source,
+    BodyPart, Creep, ErrorCode, HasPosition, MaybeHasTypedId, ObjectId, ResourceType,
+    SharedCreepProperties, Source,
 };
 
 pub struct HarvestSourceTask {
@@ -39,16 +39,23 @@ impl super::Task for HarvestSourceTask {
             }
         }
 
+        let free_capacity = creep.store().get_free_capacity(Some(ResourceType::Energy));
+        if free_capacity == 0 {
+            complete(creep.try_id().unwrap());
+            return;
+        }
+
+        if 10 > free_capacity {
+            complete(creep.try_id().unwrap());
+            return;
+        }
+
         if let Some(source) = self.target.resolve() {
             if creep.pos().is_near_to(source.pos()) {
                 creep.harvest(&source).unwrap_or_else(|e| {
                     debug!("couldn't harvest: {:?}", e);
                     cancel(creep.try_id().unwrap());
                 });
-
-                if creep.store().get_free_capacity(Some(ResourceType::Energy)) == 0 {
-                    complete(creep.try_id().unwrap());
-                }
             } else {
                 let result = creep.move_to(&source);
 
