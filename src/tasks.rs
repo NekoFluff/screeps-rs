@@ -263,7 +263,7 @@ impl TaskManager {
                 continue;
             }
 
-            if let Some(task) = task_list.current_task() {
+            if let Some(task) = task_list.get_primary_task() {
                 let room_name = task
                     .get_target_pos()
                     .map(|p| p.room_name())
