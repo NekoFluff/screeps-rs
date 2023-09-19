@@ -80,14 +80,15 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
         if creep_type != "source_harvester"
             && target.store().get_free_capacity(Some(ResourceType::Energy)) == 0
         {
-            if let Some(extension_id) = self.get_nearest_extension(creep) {
-                switch(
-                    creep.try_id().unwrap(),
-                    super::TaskList::new(vec![Box::new(TransferTask::new(extension_id))], false, 0),
-                );
-            } else {
-                complete(creep.try_id().unwrap());
-            }
+            // if let Some(extension_id) = self.get_nearest_extension(creep) {
+            //     switch(
+            //         creep.try_id().unwrap(),
+            //         super::TaskList::new(vec![Box::new(TransferTask::new(extension_id))], false, 0),
+            //     );
+            // } else {
+            //     complete(creep.try_id().unwrap());
+            // }
+            complete(creep.try_id().unwrap());
             return;
         }
 
@@ -97,19 +98,19 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
                 .unwrap_or_else(|e| {
                     info!("couldn't transfer: {:?}", e);
 
-                    if creep_type != "source_harvester" {
-                        if let Some(extension_id) = self.get_nearest_extension(creep) {
-                            switch(
-                                creep.try_id().unwrap(),
-                                super::TaskList::new(
-                                    vec![Box::new(TransferTask::new(extension_id))],
-                                    false,
-                                    0,
-                                ),
-                            );
-                            return;
-                        }
-                    }
+                    // if creep_type != "source_harvester" {
+                    //     if let Some(extension_id) = self.get_nearest_extension(creep) {
+                    //         switch(
+                    //             creep.try_id().unwrap(),
+                    //             super::TaskList::new(
+                    //                 vec![Box::new(TransferTask::new(extension_id))],
+                    //                 false,
+                    //                 0,
+                    //             ),
+                    //         );
+                    //         return;
+                    //     }
+                    // }
 
                     cancel(creep.try_id().unwrap());
                 });
