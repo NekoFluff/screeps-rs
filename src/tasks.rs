@@ -527,9 +527,14 @@ impl TaskManager {
                 }
             } else if !similar_task_lists.is_empty() {
                 let first_task_list = similar_task_lists.get(0).unwrap().1;
+
+                let first_task = first_task_list.current_task().unwrap();
+                let task = task_list.current_task().unwrap();
                 let first_primary_task = first_task_list.get_primary_task().unwrap();
                 let primary_task = task_list.get_primary_task().unwrap();
-                if primary_task.get_type() == first_primary_task.get_type() {
+                if primary_task.get_type() == first_primary_task.get_type()
+                    && first_task.get_type() == task.get_type()
+                {
                     similar_task_lists.push((index, task_list));
                 } else {
                     break;
