@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use log::*;
 use screeps::{constants::Part, enums::StructureObject, find, game};
-use screeps::{HasPosition, ResourceType, Room, RoomName, StructureProperties, StructureType};
+use screeps::{HasPosition, ResourceType, RoomName, StructureProperties, StructureType};
 use spawn::{SpawnGoal, SpawnGoals, SpawnManager};
 use tasks::TaskManager;
 use wasm_bindgen::prelude::*;
@@ -51,20 +51,20 @@ pub fn game_loop() {
         let rooms = game::rooms().values();
         utils::log_cpu_usage("get rooms");
 
-        for room in rooms {
-            execute_towers(&room);
-            utils::log_cpu_usage("execute towers");
-        }
-
         let mut task_manager = task_manager_refcell.borrow_mut();
         task_manager.clean_up_tasks();
         utils::log_cpu_usage("clean up tasks");
-        task_manager.classify_links();
-        utils::log_cpu_usage("classify links");
+        task_manager.refresh_room_info();
+        utils::log_cpu_usage("refresh room info");
         let flag_tasks_lists = task_manager.assign_tasks();
         utils::log_cpu_usage("assign tasks");
         task_manager.execute_tasks();
         utils::log_cpu_usage("execute tasks");
+
+        for room in rooms {
+            execute_towers(task_manager.room_info_map.get(&room.name()).unwrap());
+            utils::log_cpu_usage(stringify!("execute towers in room {}", room.name()));
+        }
 
         let claim_task_exists = flag_tasks_lists.iter().any(|t| {
             if let Some(task) = t.current_task() {
@@ -92,11 +92,7 @@ pub fn game_loop() {
                 .map(|s| metadata::SourceInfo::new(s, None))
                 .collect::<Vec<_>>();
 
-            let link_type_map = LinkTypeMap::new();
-            let link_type_map = task_manager
-                .room_links
-                .get(&room.name())
-                .unwrap_or(&link_type_map);
+            let link_type_map = &task_manager.room_info_map.get(&room.name()).unwrap().links;
 
             let source_link_has_output = !(link_type_map.storage_links.is_empty()
                 && link_type_map.controller_links.is_empty());
@@ -149,11 +145,8 @@ pub fn game_loop() {
             let controller_link_energy = link_type_map
                 .controller_links
                 .iter()
-                .map(|l| {
-                    l.as_has_store()
-                        .unwrap()
-                        .store()
-                        .get_used_capacity(Some(ResourceType::Energy))
+                .map(|metadata::ControllerLink(l, _)| {
+                    l.store().get_used_capacity(Some(ResourceType::Energy))
                 })
                 .sum::<u32>();
             let source_link_count = link_type_map.source_links.len();
@@ -198,11 +191,8 @@ pub fn game_loop() {
             let storage_link_energy = link_type_map
                 .storage_links
                 .iter()
-                .map(|l| {
-                    l.as_has_store()
-                        .unwrap()
-                        .store()
-                        .get_used_capacity(Some(ResourceType::Energy))
+                .map(|metadata::StorageLink(l, _)| {
+                    l.store().get_used_capacity(Some(ResourceType::Energy))
                 })
                 .sum::<u32>();
             spawn_goals.push(SpawnGoal {
@@ -272,34 +262,10 @@ pub fn game_loop() {
     );
 }
 
-struct LinkTypeMap {
-    source_links: Vec<StructureObject>,
-    storage_links: Vec<StructureObject>,
-    controller_links: Vec<StructureObject>,
-    unknown_links: Vec<StructureObject>,
-}
-
-impl LinkTypeMap {
-    fn new() -> LinkTypeMap {
-        LinkTypeMap {
-            source_links: Vec::new(),
-            storage_links: Vec::new(),
-            controller_links: Vec::new(),
-            unknown_links: Vec::new(),
-        }
-    }
-}
-
-impl Default for LinkTypeMap {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-fn execute_towers(room: &Room) {
-    let structures = room.find(find::STRUCTURES, None);
-    let my_structures = room.find(find::MY_STRUCTURES, None);
-    let mut enemies = room.find(find::HOSTILE_CREEPS, None);
+fn execute_towers(room_info: &metadata::RoomInfo) {
+    let structures = &room_info.structures;
+    let my_structures = &room_info.my_structures;
+    let mut enemies = room_info.room.find(find::HOSTILE_CREEPS, None);
 
     let towers = my_structures
         .iter()

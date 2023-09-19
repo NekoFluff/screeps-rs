@@ -1,9 +1,6 @@
 use core::panic;
 
-use screeps::{
-    Creep, HasPosition, OwnedStructureProperties, Room, RoomName, SharedCreepProperties, Source,
-    StructureObject, StructureProperties, StructureType,
-};
+use screeps::{Creep, OwnedStructureProperties, Room, RoomName, SharedCreepProperties};
 
 use log::*;
 
@@ -19,26 +16,6 @@ pub fn is_mine(room: &Room) -> bool {
     room.controller()
         .map(|controller| controller.my())
         .unwrap_or(false)
-}
-
-pub fn get_source_links(room: &Room) -> Vec<(StructureObject, Source)> {
-    let my_structures = room.find(screeps::find::MY_STRUCTURES, None);
-
-    my_structures
-        .iter()
-        .filter(|s| s.structure_type() == StructureType::Link)
-        .map(|s| {
-            let sources = room.find(screeps::find::SOURCES, None);
-            for source in sources.iter() {
-                if s.pos().in_range_to(source.pos(), 2) {
-                    return Some((s.clone(), source.clone()));
-                }
-            }
-            None
-        })
-        .filter(|s| s.is_some())
-        .map(|s| s.unwrap())
-        .collect::<Vec<_>>()
 }
 
 pub fn get_room_name(room_name_str: &str) -> RoomName {

@@ -2,8 +2,8 @@ use std::fmt::Debug;
 
 use log::*;
 use screeps::{
-    BodyPart, Creep, ErrorCode, HasPosition, MaybeHasTypedId, ObjectId, ResourceType,
-    SharedCreepProperties, Source,
+    Creep, ErrorCode, HasPosition, MaybeHasTypedId, ObjectId, ResourceType, SharedCreepProperties,
+    Source,
 };
 
 pub struct HarvestSourceTask {

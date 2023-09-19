@@ -1,4 +1,7 @@
-use screeps::{look::LookResult, Creep, HasPosition, MaybeHasTypedId, Source};
+use screeps::{
+    find, look::LookResult, ConstructionSite, Creep, HasPosition, MaybeHasTypedId, Room, Source,
+    StructureController, StructureLink, StructureObject, StructureSpawn, StructureStorage,
+};
 
 pub struct SourceInfo {
     pub non_wall_terrain_count: u32,
@@ -107,6 +110,117 @@ impl SourceInfo {
     }
 }
 
-struct RoomInfo {
+pub struct RoomInfo {
+    pub room: Room,
     pub sources: Vec<SourceInfo>,
+    pub structures: Vec<StructureObject>,
+    pub my_structures: Vec<StructureObject>,
+    pub my_spawns: Vec<StructureSpawn>,
+    pub construction_sites: Vec<ConstructionSite>,
+    pub controller: Option<StructureController>,
+    pub links: LinkTypeMap,
+}
+
+impl RoomInfo {
+    pub fn new(room: Room) -> RoomInfo {
+        let sources = room
+            .find(screeps::constants::find::SOURCES, None)
+            .iter()
+            .map(|source| SourceInfo::new(source, None))
+            .collect();
+
+        let structures = room.find(screeps::constants::find::STRUCTURES, None);
+
+        let my_structures = room.find(screeps::constants::find::MY_STRUCTURES, None);
+
+        let my_spawns = room.find(screeps::constants::find::MY_SPAWNS, None);
+
+        let construction_sites = room.find(screeps::constants::find::CONSTRUCTION_SITES, None);
+
+        let controller = room.controller();
+
+        let links = LinkTypeMap::new(&room);
+
+        RoomInfo {
+            room,
+            sources,
+            structures,
+            my_structures,
+            my_spawns,
+            construction_sites,
+            controller,
+            links,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct LinkTypeMap {
+    pub source_links: Vec<SourceLink>,
+    pub storage_links: Vec<StorageLink>,
+    pub controller_links: Vec<ControllerLink>,
+    pub unknown_links: Vec<UnknownLink>,
+}
+
+pub struct SourceLink(pub StructureLink, pub Source);
+pub struct StorageLink(pub StructureLink, pub StructureStorage);
+pub struct ControllerLink(pub StructureLink, pub StructureController);
+
+pub struct UnknownLink(StructureLink);
+
+impl LinkTypeMap {
+    pub fn new(room: &Room) -> Self {
+        let mut map: LinkTypeMap = LinkTypeMap::default();
+
+        let my_structures = room.find(find::MY_STRUCTURES, None);
+
+        let links = my_structures.iter().filter_map(|s| {
+            if let StructureObject::StructureLink(link) = s {
+                return Some(link.clone());
+            }
+            None
+        });
+
+        let sources = room.find(find::SOURCES, None);
+
+        let storages = my_structures
+            .iter()
+            .filter_map(|s| {
+                if let StructureObject::StructureStorage(storage) = s {
+                    return Some(storage.clone());
+                }
+                None
+            })
+            .collect::<Vec<StructureStorage>>();
+
+        if let Some(controller) = room.controller() {
+            'link_loop: for link in links {
+                for source in sources.iter() {
+                    if link.pos().in_range_to(source.pos(), 2) {
+                        map.source_links
+                            .push(SourceLink(link.clone(), source.clone()));
+                        continue 'link_loop;
+                    }
+                }
+
+                if link.pos().in_range_to(controller.pos(), 2) {
+                    map.controller_links
+                        .push(ControllerLink(link.clone(), controller.clone()));
+                    continue;
+                }
+
+                for storage in storages.iter() {
+                    if link.pos().in_range_to(storage.pos(), 2) {
+                        map.storage_links
+                            .push(StorageLink(link.clone(), storage.clone()));
+                        continue 'link_loop;
+                    }
+                }
+
+                map.unknown_links.push(UnknownLink(link.clone()));
+            }
+        }
+
+        map
+    }
 }

@@ -41,10 +41,8 @@ pub use travel_dumb::TravelDumbTask;
 pub use upgrade::UpgradeTask;
 pub use withdraw::WithdrawTask;
 
-use crate::{
-    utils::{self, get_creep_type},
-    LinkTypeMap,
-};
+use crate::metadata::{ControllerLink, RoomInfo, SourceLink, StorageLink};
+use crate::utils::{self, get_creep_type};
 use wasm_bindgen::JsValue;
 
 type TaskMap = HashMap<ObjectId<Creep>, TaskList>;
@@ -53,7 +51,7 @@ pub struct TaskManager {
     pub tasks: TaskMap,
     working_creeps_by_room_and_type: HashMap<RoomName, HashMap<String, u32>>,
     working_creeps_by_room_and_pos: HashMap<RoomName, HashMap<Position, u32>>,
-    pub room_links: HashMap<RoomName, LinkTypeMap>,
+    pub room_info_map: HashMap<RoomName, RoomInfo>,
 }
 
 impl TaskManager {
@@ -76,65 +74,18 @@ impl TaskManager {
             tasks: HashMap::new(),
             working_creeps_by_room_and_type,
             working_creeps_by_room_and_pos: HashMap::new(),
-            room_links: HashMap::new(),
+            room_info_map: HashMap::new(),
         }
     }
 
-    pub fn classify_links(&mut self) {
-        self.room_links = HashMap::new();
-
+    pub fn refresh_room_info(&mut self) {
         for room in game::rooms().values() {
-            self.room_links
-                .insert(room.name(), self.classify_links_for_room(&room));
+            self.room_info_map.insert(room.name(), RoomInfo::new(room));
         }
-    }
-
-    fn classify_links_for_room(&self, room: &Room) -> LinkTypeMap {
-        let mut map: LinkTypeMap = LinkTypeMap::new();
-
-        let my_structures = room.find(find::MY_STRUCTURES, None);
-
-        let links = my_structures
-            .iter()
-            .filter(|s| s.structure_type() == StructureType::Link);
-
-        let sources = room.find(find::SOURCES, None);
-
-        let storages = my_structures
-            .iter()
-            .filter(|s| s.structure_type() == StructureType::Storage)
-            .collect::<Vec<_>>();
-
-        if let Some(controller) = room.controller() {
-            'link_loop: for link in links {
-                for source in sources.iter() {
-                    if link.pos().in_range_to(source.pos(), 2) {
-                        map.source_links.push(link.clone());
-                        continue 'link_loop;
-                    }
-                }
-
-                if link.pos().in_range_to(controller.pos(), 2) {
-                    map.controller_links.push(link.clone());
-                    continue;
-                }
-
-                for storage in storages.iter() {
-                    if link.pos().in_range_to(storage.pos(), 2) {
-                        map.storage_links.push(link.clone());
-                        continue 'link_loop;
-                    }
-                }
-
-                map.unknown_links.push(link.clone());
-            }
-        }
-
-        map
     }
 
     fn execute_links(&self) {
-        for link_map in self.room_links.values() {
+        for room_info in self.room_info_map.values() {
             // info!(
             //     "links: source: {}, storage: {}, controller: {}, unknown: {}",
             //     link_map.source_links.len(),
@@ -142,62 +93,52 @@ impl TaskManager {
             //     link_map.controller_links.len(),
             //     link_map.unknown_links.len()
             // );
-            'source_loop: for link in link_map.source_links.iter() {
-                if let StructureObject::StructureLink(source_link) = link {
-                    if source_link.cooldown() > 0 {
-                        continue;
+            let link_map = &room_info.links;
+            'source_loop: for SourceLink(source_link, _source) in link_map.source_links.iter() {
+                if source_link.cooldown() > 0 {
+                    continue;
+                }
+
+                if source_link
+                    .store()
+                    .get_used_capacity(Some(ResourceType::Energy))
+                    > 0
+                {
+                    for StorageLink(storage_link, _storage) in link_map.storage_links.iter() {
+                        if storage_link
+                            .store()
+                            .get_free_capacity(Some(ResourceType::Energy))
+                            > 50
+                        {
+                            info!("transferring energy from source to storage");
+                            source_link
+                                .transfer_energy(storage_link, None)
+                                .unwrap_or_else(|e| {
+                                    info!("link couldn't transfer energy to storage: {:?}", e);
+                                });
+                            continue 'source_loop;
+                        }
                     }
 
-                    if source_link
-                        .store()
-                        .get_used_capacity(Some(ResourceType::Energy))
-                        > 0
+                    for ControllerLink(controller_link, _controller) in
+                        link_map.controller_links.iter()
                     {
-                        for storage_link in link_map.storage_links.iter() {
-                            if let StructureObject::StructureLink(storage_link) = storage_link {
-                                if storage_link
-                                    .store()
-                                    .get_free_capacity(Some(ResourceType::Energy))
-                                    > 50
-                                {
-                                    info!("transferring energy from source to storage");
-                                    source_link
-                                        .transfer_energy(storage_link, None)
-                                        .unwrap_or_else(|e| {
-                                            info!(
-                                                "link couldn't transfer energy to storage: {:?}",
-                                                e
-                                            );
-                                        });
-                                    continue 'source_loop;
-                                }
-                            }
+                        if controller_link
+                            .store()
+                            .get_free_capacity(Some(ResourceType::Energy))
+                            > 50
+                        {
+                            info!("transferring energy from source to controller");
+                            source_link
+                                .transfer_energy(controller_link, None)
+                                .unwrap_or_else(|e| {
+                                    info!("creep couldn't transfer energy to controller: {:?}", e);
+                                });
+                            continue 'source_loop;
                         }
-
-                        for controller_link in link_map.controller_links.iter() {
-                            if let StructureObject::StructureLink(controller_link) = controller_link
-                            {
-                                if controller_link
-                                    .store()
-                                    .get_free_capacity(Some(ResourceType::Energy))
-                                    > 50
-                                {
-                                    info!("transferring energy from source to controller");
-                                    source_link
-                                        .transfer_energy(controller_link, None)
-                                        .unwrap_or_else(|e| {
-                                            info!(
-                                                "creep couldn't transfer energy to controller: {:?}",
-                                                e
-                                            );
-                                        });
-                                    continue 'source_loop;
-                                }
-                            }
-                        }
-
-                        // info!("link idle, no storage or controller links available");
                     }
+
+                    // info!("link idle, no storage or controller links available");
                 }
             }
         }
@@ -626,9 +567,11 @@ impl TaskManager {
 
         let mut tasks: Vec<TaskList> = Vec::new();
 
-        let structures = room.find(find::STRUCTURES, None);
-        let my_structures = room.find(find::MY_STRUCTURES, None);
-        let construction_sites = room.find(find::CONSTRUCTION_SITES, None);
+        let room_info = self.room_info_map.get(&room.name()).unwrap();
+
+        let structures = &room_info.structures;
+        let my_structures = &room_info.my_structures;
+        let construction_sites = &room_info.construction_sites;
         let enemy_creeps = room.find(find::HOSTILE_CREEPS, None);
         let storage = my_structures
             .iter()
@@ -674,54 +617,26 @@ impl TaskManager {
         }
 
         // transfer energy from link to storage
-        for storage_link in self
-            .room_links
+        for StorageLink(storage_link, storage) in self
+            .room_info_map
             .get(&room.name())
             .unwrap()
+            .links
             .storage_links
             .iter()
         {
-            if let StructureObject::StructureLink(storage_link) = storage_link {
-                if self.is_pos_being_worked_on(&room.name(), &storage_link.pos(), 1) {
-                    continue;
-                }
+            if self.is_pos_being_worked_on(&room.name(), &storage_link.pos(), 1) {
+                continue;
+            }
 
-                if storage_link
-                    .store()
-                    .get_used_capacity(Some(ResourceType::Energy))
-                    > 0
-                {
-                    if let Some(id) = storage_link.try_id() {
-                        // get storage closest to link
-                        let storage = my_structures
-                            .iter()
-                            .filter(|s| {
-                                s.structure_type() == StructureType::Storage
-                                    && s.pos().in_range_to(storage_link.pos(), 2)
-                            })
-                            .min_by(|a, b| {
-                                storage_link
-                                    .pos()
-                                    .get_range_to(a.pos())
-                                    .cmp(&storage_link.pos().get_range_to(b.pos()))
-                            });
-
-                        if let Some(storage) = storage {
-                            if let StructureObject::StructureStorage(storage) = storage {
-                                let transfer_task = Box::new(TransferTask::new(storage.id()));
-                                let withdraw_task = Box::new(WithdrawTask::new(id));
-                                tasks.push(TaskList::new(
-                                    vec![withdraw_task, transfer_task],
-                                    false,
-                                    1,
-                                ));
-                            } else {
-                                let withdraw_task = Box::new(WithdrawTask::new(id));
-                                tasks.push(TaskList::new(vec![withdraw_task], false, 0));
-                            }
-                        }
-                    }
-                }
+            if storage_link
+                .store()
+                .get_used_capacity(Some(ResourceType::Energy))
+                > 0
+            {
+                let transfer_task = Box::new(TransferTask::new(storage.id()));
+                let withdraw_task = Box::new(WithdrawTask::new(storage_link.id()));
+                tasks.push(TaskList::new(vec![withdraw_task, transfer_task], false, 1));
             }
         }
 
@@ -799,38 +714,35 @@ impl TaskManager {
         utils::log_cpu_usage("get room task lists - tower tasks");
 
         // transfer energy from link to controller
-        for controller_link in self
-            .room_links
+        for ControllerLink(controller_link, controller) in self
+            .room_info_map
             .get(&room.name())
             .unwrap()
+            .links
             .controller_links
             .iter()
         {
-            if let StructureObject::StructureLink(controller_link) = controller_link {
-                if self.is_pos_being_worked_on(&room.name(), &controller_link.pos(), 1) {
-                    continue;
-                }
+            if self.is_pos_being_worked_on(&room.name(), &controller_link.pos(), 1) {
+                continue;
+            }
 
-                if extension_transfer_tasks_exist {
-                    continue;
-                }
+            if extension_transfer_tasks_exist {
+                continue;
+            }
 
-                if controller_link
+            if controller_link
+                .store()
+                .get_used_capacity(Some(ResourceType::Energy))
+                * 3
+                > controller_link
                     .store()
-                    .get_used_capacity(Some(ResourceType::Energy))
-                    * 3
-                    > controller_link
-                        .store()
-                        .get_capacity(Some(ResourceType::Energy))
-                        * 2
-                    && controller_link.pos().in_range_to(controller.pos(), 2)
-                {
-                    if let Some(id) = controller_link.try_id() {
-                        let upgrade_task = Box::new(UpgradeTask::new(controller.id()));
-                        let withdraw_task = Box::new(WithdrawTask::new(id));
-                        tasks.push(TaskList::new(vec![withdraw_task, upgrade_task], false, 1));
-                    }
-                }
+                    .get_capacity(Some(ResourceType::Energy))
+                    * 2
+                && controller_link.pos().in_range_to(controller.pos(), 2)
+            {
+                let upgrade_task = Box::new(UpgradeTask::new(controller.id()));
+                let withdraw_task = Box::new(WithdrawTask::new(controller_link.id()));
+                tasks.push(TaskList::new(vec![withdraw_task, upgrade_task], false, 1));
             }
         }
 
@@ -947,84 +859,59 @@ impl TaskManager {
         if creep_type == "source_harvester" {
             return self.get_harvest_source_task_list(creep, false, true);
         } else if creep_type == "upgrader" {
-            let structure = self
-                .room_links
+            let ControllerLink(structure_link, controller) = self
+                .room_info_map
                 .get(&creep.room().unwrap().name())
                 .unwrap()
+                .links
                 .controller_links
                 .get(0)
                 .unwrap();
 
-            if let StructureObject::StructureLink(link) = structure {
-                if let Some(controller) = creep.room().unwrap().controller() {
-                    let upgrade_task = Box::new(UpgradeTask::new(controller.id()));
-                    let link_id = link.try_id().unwrap();
-                    let withdraw_task = Box::new(WithdrawTask::new(link_id));
-                    let idle_until_task = Box::new(IdleUntilTask::new(
-                        |_, link: &ObjectId<StructureLink>| {
-                            link.resolve()
-                                .unwrap()
-                                .store()
-                                .get_used_capacity(Some(ResourceType::Energy))
-                                > 0
-                        },
-                        link_id,
-                    ));
-                    return Some(TaskList::new(
-                        vec![withdraw_task, upgrade_task, idle_until_task],
-                        true,
-                        1,
-                    ));
-                }
-            }
-
-            return None;
+            let upgrade_task = Box::new(UpgradeTask::new(controller.id()));
+            let withdraw_task = Box::new(WithdrawTask::new(structure_link.id()));
+            let idle_until_task = Box::new(IdleUntilTask::new(
+                |_, link: &ObjectId<StructureLink>| {
+                    link.resolve()
+                        .unwrap()
+                        .store()
+                        .get_used_capacity(Some(ResourceType::Energy))
+                        > 0
+                },
+                structure_link.id(),
+            ));
+            return Some(TaskList::new(
+                vec![withdraw_task, upgrade_task, idle_until_task],
+                true,
+                1,
+            ));
         } else if creep_type == "storager" {
-            let structure = self
-                .room_links
+            let StorageLink(storage_link, storage) = self
+                .room_info_map
                 .get(&creep.room().unwrap().name())
                 .unwrap()
+                .links
                 .storage_links
                 .get(0)
                 .unwrap();
 
-            if let StructureObject::StructureLink(storage_link) = structure {
-                // get storage closest to link
-                let my_structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
-                let storage = my_structures
-                    .iter()
-                    .filter(|s| {
-                        s.structure_type() == StructureType::Storage
-                            && s.pos().in_range_to(storage_link.pos(), 2)
-                    })
-                    .min_by(|a, b| {
-                        storage_link
-                            .pos()
-                            .get_range_to(a.pos())
-                            .cmp(&storage_link.pos().get_range_to(b.pos()))
-                    });
-
-                if let Some(StructureObject::StructureStorage(storage)) = storage {
-                    let link_id = storage_link.try_id().unwrap();
-                    let withdraw_task = Box::new(WithdrawTask::new(link_id));
-                    let transfer_task = Box::new(TransferTask::new(storage.id()));
-                    let idle_until_task = Box::new(IdleUntilTask::new(
-                        |_, link: &ObjectId<StructureLink>| {
-                            link.resolve()
-                                .unwrap()
-                                .store()
-                                .get_used_capacity(Some(ResourceType::Energy))
-                                > 0
-                        },
-                        link_id,
-                    ));
-                    return Some(TaskList::new(
-                        vec![withdraw_task, transfer_task, idle_until_task],
-                        true,
-                        1,
-                    ));
-                }
-            }
+            let withdraw_task = Box::new(WithdrawTask::new(storage_link.id()));
+            let transfer_task = Box::new(TransferTask::new(storage.id()));
+            let idle_until_task = Box::new(IdleUntilTask::new(
+                |_, link: &ObjectId<StructureLink>| {
+                    link.resolve()
+                        .unwrap()
+                        .store()
+                        .get_used_capacity(Some(ResourceType::Energy))
+                        > 0
+                },
+                storage_link.id(),
+            ));
+            return Some(TaskList::new(
+                vec![withdraw_task, transfer_task, idle_until_task],
+                true,
+                1,
+            ));
         }
 
         if creep_parts.contains(&Part::Attack) {
@@ -1079,29 +966,22 @@ impl TaskManager {
         if let Some(controller) = room.controller() {
             if controller.my() {
                 let mut sources: Vec<Source>;
-                if active_only {
+
+                if link_required {
+                    let links = &self
+                        .room_info_map
+                        .get(&room.name())
+                        .unwrap()
+                        .links
+                        .source_links;
+                    sources = links
+                        .iter()
+                        .map(|SourceLink(_, source)| source.clone())
+                        .collect();
+                } else if active_only {
                     sources = room.find(find::SOURCES_ACTIVE, None);
                 } else {
                     sources = room.find(find::SOURCES, None);
-                };
-
-                if link_required {
-                    let links = self.room_links.get(&room.name()).unwrap();
-
-                    sources = sources
-                        .drain(..)
-                        .filter(|s| {
-                            for source_link in links.source_links.iter() {
-                                if let StructureObject::StructureLink(source_link) = source_link {
-                                    if source_link.pos().in_range_to(s.pos(), 4) {
-                                        return true;
-                                    }
-                                }
-                            }
-
-                            false
-                        })
-                        .collect::<Vec<_>>();
                 }
 
                 sources.sort_by_key(|s| {
@@ -1140,11 +1020,16 @@ impl TaskManager {
 
                     // transfer to closest source link
                     if link_required {
-                        let source_links = utils::get_source_links(&room);
-
-                        if let Some((StructureObject::StructureLink(source_link), _)) = source_links
+                        if let Some(SourceLink(source_link, source)) = self
+                            .room_info_map
+                            .get(&room.name())
+                            .unwrap()
+                            .links
+                            .source_links
                             .iter()
-                            .filter(|(_link, tmp_source)| tmp_source.pos() == source.pos())
+                            .filter(|SourceLink(_link, tmp_source)| {
+                                tmp_source.pos() == source.pos()
+                            })
                             .last()
                         {
                             let harvest_task = Box::new(HarvestSourceTask::new(source.id()));

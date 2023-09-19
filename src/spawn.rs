@@ -57,6 +57,12 @@ impl SpawnManager {
                 continue;
             }
 
+            let source_count: u32 = spawn
+                .room()
+                .unwrap()
+                .find(screeps::constants::find::SOURCES, None)
+                .len() as u32;
+
             if let Some(spawn_goals) = self.room_spawn_goals.get(&room_name) {
                 for spawn_goal in spawn_goals.iter() {
                     let creep_count = if spawn_goal.is_global {
@@ -65,11 +71,6 @@ impl SpawnManager {
                         self.get_creep_count_in_room(&room_name, &spawn_goal.name)
                     };
 
-                    let source_count: u32 = spawn
-                        .room()
-                        .unwrap()
-                        .find(screeps::constants::find::SOURCES, None)
-                        .len() as u32;
                     let target_count = spawn_goal.count
                         + std::cmp::max(
                             spawn_goal.count * (source_count - 1) * spawn_goal.source_modifier,
