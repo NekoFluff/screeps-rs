@@ -125,6 +125,10 @@ impl<T: Transferable + Resolvable + HasStore> super::Task for TransferTask<T> {
     fn get_icon(&self) -> String {
         String::from("🚚")
     }
+
+    fn requires_energy(&self) -> bool {
+        true
+    }
 }
 
 impl<T: Transferable + Resolvable + HasStore> Debug for TransferTask<T> {

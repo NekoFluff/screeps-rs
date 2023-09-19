@@ -973,6 +973,62 @@ impl TaskManager {
             }
 
             return None;
+        } else if creep_type == "storager" {
+            let structure = self
+                .room_links
+                .get(&creep.room().unwrap().name())
+                .unwrap()
+                .storage_links
+                .get(0)
+                .unwrap();
+
+            if let StructureObject::StructureLink(storage_link) = structure {
+                // get storage closest to link
+                let my_structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
+                let storage = my_structures
+                    .iter()
+                    .filter(|s| {
+                        s.structure_type() == StructureType::Storage
+                            && s.pos().in_range_to(storage_link.pos(), 2)
+                            && s.as_has_store()
+                                .unwrap()
+                                .store()
+                                .get_free_capacity(Some(ResourceType::Energy))
+                                as u32
+                                > s.as_has_store()
+                                    .unwrap()
+                                    .store()
+                                    .get_capacity(Some(ResourceType::Energy))
+                                    / 2
+                    })
+                    .min_by(|a, b| {
+                        storage_link
+                            .pos()
+                            .get_range_to(a.pos())
+                            .cmp(&storage_link.pos().get_range_to(b.pos()))
+                    });
+
+                if let Some(StructureObject::StructureStorage(storage)) = storage {
+                    let link_id = storage_link.try_id().unwrap();
+                    let withdraw_task = Box::new(WithdrawTask::new(link_id));
+                    let transfer_task = Box::new(TransferTask::new(storage.id()));
+                    let idle_until_task = Box::new(IdleUntilTask::new(
+                        |_, link: &ObjectId<StructureLink>| {
+                            link.resolve()
+                                .unwrap()
+                                .store()
+                                .get_used_capacity(Some(ResourceType::Energy))
+                                > 0
+                        },
+                        link_id,
+                    ));
+                    return Some(TaskList::new(
+                        vec![withdraw_task, transfer_task, idle_until_task],
+                        true,
+                        1,
+                    ));
+                }
+            }
         }
 
         if creep_parts.contains(&Part::Attack) {
@@ -1190,6 +1246,8 @@ fn can_creep_handle_task(creep: &Creep, task: &dyn Task) -> bool {
         return task.get_type() == TaskType::HarvestSource;
     } else if creep_type == "upgrader" {
         return task.get_type() == TaskType::Upgrade;
+    } else if creep_type == "storager" {
+        return task.get_type() == TaskType::Withdraw;
     }
 
     true
