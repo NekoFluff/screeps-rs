@@ -32,6 +32,13 @@ impl super::Task for HarvestSourceTask {
         cancel: Box<dyn FnOnce(ObjectId<Creep>)>,
         _switch: Box<dyn FnOnce(ObjectId<Creep>, super::TaskList)>,
     ) {
+        if let Some(ticks_to_live) = creep.ticks_to_live() {
+            if ticks_to_live <= 3 {
+                cancel(creep.try_id().unwrap());
+                return;
+            }
+        }
+
         if let Some(source) = self.target.resolve() {
             if creep.pos().is_near_to(source.pos()) {
                 creep.harvest(&source).unwrap_or_else(|e| {
