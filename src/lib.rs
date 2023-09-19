@@ -27,6 +27,7 @@ thread_local! {
     static SOURCE_DATA: RefCell<Vec<metadata::SourceInfo>> = RefCell::new(Vec::new());
     static PAUSE_SCRIPT: RefCell<bool> = RefCell::new(false);
     static LAST_CPU_USAGE: RefCell<f64> = RefCell::new(0_f64);
+    static AVERAGE_CPU_USAGE_X_TICKS: RefCell<Vec<f64>> = RefCell::new(Vec::new());
 }
 
 // to use a reserved name as a function name, use `js_name`:
@@ -259,6 +260,34 @@ pub fn game_loop() {
         game::cpu::get_used(),
         game::cpu::get_heap_statistics().peak_malloced_memory(),
         game::cpu::get_heap_statistics().total_heap_size()
+    );
+
+    // update average cpu usage
+    let max_ticks = 1000;
+    AVERAGE_CPU_USAGE_X_TICKS.with(|a| {
+        let mut average_cpu_usage = a.borrow_mut();
+        let cpu = game::cpu::get_used();
+        if cpu > 20_f64 {
+            return;
+        }
+        average_cpu_usage.push(cpu);
+        if average_cpu_usage.len() > max_ticks {
+            average_cpu_usage.remove(0);
+        }
+    });
+
+    let len = AVERAGE_CPU_USAGE_X_TICKS.with(|a| a.borrow().len()) as f64;
+    let min =
+        AVERAGE_CPU_USAGE_X_TICKS.with(|a| a.borrow().iter().copied().fold(f64::NAN, f64::min));
+    let max =
+        AVERAGE_CPU_USAGE_X_TICKS.with(|a| a.borrow().iter().copied().fold(f64::NAN, f64::max));
+    info!(
+        "[CPU usage] [Avg: {:.2} | Min: {:.2} | Max: {:.2}] [{} ticks] | Final {:.2}",
+        AVERAGE_CPU_USAGE_X_TICKS.with(|a| { a.borrow().iter().sum::<f64>() / len }),
+        min,
+        max,
+        len,
+        game::cpu::get_used()
     );
 }
 
