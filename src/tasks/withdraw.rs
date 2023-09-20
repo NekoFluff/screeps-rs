@@ -49,7 +49,7 @@ impl<T: Withdrawable + Resolvable + HasStore> super::Task for WithdrawTask<T> {
             creep
                 .withdraw(&target, ResourceType::Energy, None)
                 .unwrap_or_else(|e| {
-                    error!("couldn't withdraw: {:?}", e);
+                    debug!("couldn't withdraw: {:?}", e);
                     cancel(creep.try_id().unwrap());
                 });
         } else {
