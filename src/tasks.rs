@@ -633,7 +633,12 @@ impl TaskManager {
             .storage_links
             .iter()
         {
-            if self.is_pos_being_worked_on(&room.name(), &storage_link.pos(), 1) {
+            if storage
+                .store()
+                .get_free_capacity(Some(ResourceType::Energy))
+                < 50
+                || self.is_pos_being_worked_on(&room.name(), &storage_link.pos(), 1)
+            {
                 continue;
             }
 
