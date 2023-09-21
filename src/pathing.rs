@@ -1,7 +1,7 @@
 use log::*;
 use screeps::{
     pathfinder::{MultiRoomCostResult, SingleRoomCostResult},
-    Creep, ErrorCode, FindPathOptions, HasPosition, Path,
+    Creep, ErrorCode, FindPathOptions, HasPosition, Path, SharedCreepProperties,
 };
 use wasm_bindgen::JsValue;
 
@@ -37,12 +37,18 @@ pub trait MovesAlongCachedPath: Stuckable {
 
     fn move_along_cached_path(&mut self, creep: &Creep) -> Result<(), ErrorCode> {
         if let Some(path) = self.get_cached_path() {
-            let path_str = path.to_string();
-            let result: Result<(), ErrorCode> = creep.move_by_path(&JsValue::from_str(&path_str));
-            if result != Ok(()) {
-                debug!("unable to move along cached path: {:?}", result);
-                self.set_stuck_count(self.get_stuck_count() + 1);
-            }
+            let result: Result<(), ErrorCode> =
+                creep.move_by_path(&JsValue::from_str(&path.to_string()));
+
+            result.unwrap_or_else(|e| match e {
+                ErrorCode::Tired => {
+                    debug!("{} too tired to move along cached path", creep.name());
+                }
+                _ => {
+                    debug!("{} unable to move along cached path: {:?}", creep.name(), e);
+                    self.set_stuck_count(self.get_stuck_count() + 1);
+                }
+            });
 
             self.set_stuck_count(0);
             return result;
