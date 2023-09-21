@@ -1,5 +1,6 @@
 "use strict";
 let wasm_module;
+let pause = false;
 
 // replace this with the name of your module
 const MODULE_NAME = "screeps-rs";
@@ -10,6 +11,10 @@ function console_error(...args) {
 }
 
 module.exports.loop = function () {
+    if (pause) {
+        return;
+    }
+
     // Clean up dead creeps
     for (var i in Memory.creeps) {
         if (!Game.creeps[i]) {
@@ -42,6 +47,9 @@ module.exports.loop = function () {
         }
     } catch (error) {
         console_error("resetting VM next tick.");
+        console_error(error);
+        console_error(error.stack);
         wasm_module = null;
+        pause = true;
     }
 }
