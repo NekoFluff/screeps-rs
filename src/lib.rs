@@ -10,6 +10,7 @@ use wasm_bindgen::prelude::*;
 
 mod logging;
 mod metadata;
+mod pathing;
 mod spawn;
 mod tasks;
 mod utils;
@@ -233,7 +234,7 @@ pub fn game_loop() {
                 body: vec![Part::Move, Part::Move, Part::Attack, Part::Attack],
                 body_upgrades: vec![],
                 max_body_upgrades: 0,
-                count: 0,
+                count: 2,
                 source_modifier: 0,
                 is_global: true, // TODO: Fix defend flag mechanic
             });
