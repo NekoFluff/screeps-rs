@@ -50,6 +50,6 @@ module.exports.loop = function () {
         console_error(error);
         console_error(error.stack);
         wasm_module = null;
-        pause = true;
+        pause = false;
     }
 }
