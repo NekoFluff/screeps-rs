@@ -65,7 +65,7 @@ pub fn game_loop() {
 
         for room in rooms {
             execute_towers(task_manager.room_info_map.get(&room.name()).unwrap());
-            utils::log_cpu_usage(stringify!("execute towers in room {}", room.name()));
+            utils::log_cpu_usage(&format!("execute towers in room {}", room.name()));
         }
 
         let claim_task_exists = flag_tasks_lists.iter().any(|t| {
@@ -234,7 +234,7 @@ pub fn game_loop() {
                 body: vec![Part::Move, Part::Move, Part::Attack, Part::Attack],
                 body_upgrades: vec![],
                 max_body_upgrades: 0,
-                count: 2,
+                count: 0,
                 source_modifier: 0,
                 is_global: true, // TODO: Fix defend flag mechanic
             });
