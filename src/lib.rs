@@ -61,7 +61,10 @@ pub fn game_loop() {
         let flag_tasks_lists = task_manager.assign_tasks();
         utils::log_cpu_usage("assign tasks");
         task_manager.execute_tasks();
-        utils::log_cpu_usage("execute tasks");
+        utils::log_cpu_usage(&format!(
+            "execute tasks for {} creeps",
+            game::creeps().keys().count()
+        ));
 
         for room in rooms {
             execute_towers(task_manager.room_info_map.get(&room.name()).unwrap());
@@ -259,7 +262,7 @@ pub fn game_loop() {
     );
 
     // update average cpu usage
-    let max_ticks = 1000;
+    let max_ticks = 100;
     AVERAGE_CPU_USAGE_X_TICKS.with(|a| {
         let mut average_cpu_usage = a.borrow_mut();
         let cpu = game::cpu::get_used();
