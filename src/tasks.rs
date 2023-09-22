@@ -899,32 +899,32 @@ impl TaskManager {
                 1,
             ));
         } else if creep_type == "storager" {
-            let StorageLink(storage_link, storage) = self
+            if let Some(StorageLink(storage_link, storage)) = self
                 .room_info_map
                 .get(&creep.room().unwrap().name())
                 .unwrap()
                 .links
                 .storage_links
                 .get(0)
-                .unwrap();
-
-            let withdraw_task = Box::new(WithdrawTask::new(storage_link.id()));
-            let transfer_task = Box::new(TransferTask::new(storage.id()));
-            let idle_until_task = Box::new(IdleUntilTask::new(
-                |_, link: &ObjectId<StructureLink>| {
-                    link.resolve()
-                        .unwrap()
-                        .store()
-                        .get_used_capacity(Some(ResourceType::Energy))
-                        > 0
-                },
-                storage_link.id(),
-            ));
-            return Some(TaskList::new(
-                vec![withdraw_task, transfer_task, idle_until_task],
-                true,
-                1,
-            ));
+            {
+                let withdraw_task = Box::new(WithdrawTask::new(storage_link.id()));
+                let transfer_task = Box::new(TransferTask::new(storage.id()));
+                let idle_until_task = Box::new(IdleUntilTask::new(
+                    |_, link: &ObjectId<StructureLink>| {
+                        link.resolve()
+                            .unwrap()
+                            .store()
+                            .get_used_capacity(Some(ResourceType::Energy))
+                            > 0
+                    },
+                    storage_link.id(),
+                ));
+                return Some(TaskList::new(
+                    vec![withdraw_task, transfer_task, idle_until_task],
+                    true,
+                    1,
+                ));
+            }
         }
 
         if creep_parts.contains(&Part::Attack) {
