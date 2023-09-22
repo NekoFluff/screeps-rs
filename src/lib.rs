@@ -88,12 +88,7 @@ pub fn game_loop() {
             let room_name = room.name();
             let spawn_goals = room_spawn_goals.entry(room_name).or_default();
 
-            let sources = room.find(find::SOURCES, None);
-            let source_infos = sources
-                .iter()
-                .map(|s| metadata::SourceInfo::new(s, None))
-                .collect::<Vec<_>>();
-
+            let source_infos = &task_manager.room_info_map.get(&room_name).unwrap().sources;
             let link_type_map = &task_manager.room_info_map.get(&room.name()).unwrap().links;
 
             let source_link_has_output = !(link_type_map.storage_links.is_empty()
